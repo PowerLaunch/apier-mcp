@@ -21,7 +21,12 @@ jobs:
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        # Using `npm install` (not `npm ci`) so a lock file generated
+        # on one platform (e.g. Windows dev machine) doesn't fail on
+        # another (Linux CI) when platform-specific optional deps
+        # like @emnapi/core differ. Slightly slower than `npm ci` but
+        # cross-platform reliable.
+        run: npm install --no-audit
 
       - name: Lint (tsc --noEmit)
         run: npm run lint
