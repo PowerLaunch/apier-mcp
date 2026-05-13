@@ -1,0 +1,59 @@
+{
+  "name": "@divisco/mcp",
+  "version": "0.1.0",
+  "description": "Thin npm proxy: connect local MCP clients (Claude Desktop, Cursor) to Apier's hosted Norwegian compliance MCP server.",
+  "type": "module",
+  "bin": {
+    "apier-mcp": "dist/cli.js"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "vitest run",
+    "lint": "tsc --noEmit",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/PowerLaunch/apier-mcp.git"
+  },
+  "homepage": "https://www.apier.no",
+  "bugs": {
+    "url": "https://github.com/PowerLaunch/apier-mcp/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "apier",
+    "norway",
+    "norwegian-compliance",
+    "altinn",
+    "skatteetaten",
+    "claude",
+    "cursor"
+  ],
+  "author": "PowerLaunch AS",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.7.0",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.6"
+  }
+}
