@@ -39,7 +39,7 @@ Example MCP client config (Claude Desktop / Cursor):
     "mcpServers": {
       "apier": {
         "command": "npx",
-        "args": ["-y", "@divisco/mcp"],
+        "args": ["-y", "@apier-no/mcp"],
         "env": { "APIER_API_KEY": "apier_live_<your_key>" }
       }
     }

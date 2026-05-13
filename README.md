@@ -1,4 +1,4 @@
-# @divisco/mcp
+# @apier-no/mcp
 
 Thin npm proxy that connects local MCP clients (Claude Desktop, Cursor, Zed, Codex, etc.) to **[Apier](https://www.apier.no)'s hosted Norwegian compliance MCP server** at `https://www.apier.no/api/mcp`.
 
@@ -13,13 +13,13 @@ Apier exposes Norwegian government compliance data and actions — Brønnøysund
 ## Install
 
 ```sh
-npm install -g @divisco/mcp
+npm install -g @apier-no/mcp
 ```
 
 Or use `npx` directly in your MCP client config (recommended — no global install needed):
 
 ```sh
-npx -y @divisco/mcp
+npx -y @apier-no/mcp
 ```
 
 ## Get an API key
@@ -39,7 +39,7 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) o
   "mcpServers": {
     "apier": {
       "command": "npx",
-      "args": ["-y", "@divisco/mcp"],
+      "args": ["-y", "@apier-no/mcp"],
       "env": {
         "APIER_API_KEY": "apier_live_<your_key_here>"
       }
@@ -59,7 +59,7 @@ Edit `~/.cursor/mcp.json` (or use Cursor's MCP settings UI):
   "mcpServers": {
     "apier": {
       "command": "npx",
-      "args": ["-y", "@divisco/mcp"],
+      "args": ["-y", "@apier-no/mcp"],
       "env": {
         "APIER_API_KEY": "apier_live_<your_key_here>"
       }
@@ -72,7 +72,7 @@ Restart Cursor. Apier tools become available to Cursor's agent.
 
 ## Other MCP clients
 
-Any MCP client that supports the stdio transport works. The pattern is the same: invoke `npx -y @divisco/mcp` with `APIER_API_KEY` in the environment.
+Any MCP client that supports the stdio transport works. The pattern is the same: invoke `npx -y @apier-no/mcp` with `APIER_API_KEY` in the environment.
 
 ## Available tools
 

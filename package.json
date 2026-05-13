@@ -1,5 +1,5 @@
 {
-  "name": "@divisco/mcp",
+  "name": "@apier-no/mcp",
   "version": "0.1.0",
   "description": "Thin npm proxy: connect local MCP clients (Claude Desktop, Cursor) to Apier's hosted Norwegian compliance MCP server.",
   "type": "module",

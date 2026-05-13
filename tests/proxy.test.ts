@@ -1,5 +1,5 @@
 /**
- * @divisco/mcp proxy tests.
+ * @apier-no/mcp proxy tests.
  *
  * Three pinning assertions:
  *   TEST 1: missing APIER_API_KEY → process.exit(1) with helpful stderr

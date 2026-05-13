@@ -1,5 +1,5 @@
 /**
- * @divisco/mcp — Thin transport-level proxy that bridges a local stdio
+ * @apier-no/mcp — Thin transport-level proxy that bridges a local stdio
  * MCP client (Claude Desktop, Cursor, etc.) to Apier's hosted MCP
  * server over Streamable HTTP.
  *
