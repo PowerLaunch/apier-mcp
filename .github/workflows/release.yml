@@ -7,33 +7,68 @@ on:
 
 permissions:
   contents: read
-  id-token: write
+  id-token: write   # required for npm provenance attestation
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false   # never cancel a publish mid-flight
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # Fork-publish guard: only the canonical repo can publish under @apier-no.
+    if: github.repository == 'PowerLaunch/apier-mcp'
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
-          cache: npm
+          registry-url: 'https://registry.npmjs.org/'
 
-      - name: Install dependencies
-        # Using `npm install` (not `npm ci`) so a lock file generated
-        # on one platform (e.g. Windows dev machine) doesn't fail on
-        # another (Linux CI) when platform-specific optional deps
-        # like @emnapi/core differ. Slightly slower than `npm ci` but
-        # cross-platform reliable.
+      - name: Verify tag matches package.json version
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::tag $TAG_VERSION does not match package.json version $PKG_VERSION"
+            exit 1
+          fi
+          echo "✅ tag $TAG_VERSION matches package.json"
+
+      - name: Install
         run: npm install --no-audit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
 
       - name: Build
         run: npm run build
 
-      - name: Test
-        run: npm test
+      - name: Tarball surface secret-leak grep
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pack
+          TARBALL=$(ls apier-no-mcp-*.tgz | head -1)
+          if [ -z "$TARBALL" ]; then
+            echo "::error::npm pack produced no tarball"
+            exit 1
+          fi
+          echo "=== tarball contents ==="
+          tar -tzf "$TARBALL"
+          mkdir -p /tmp/audit
+          tar -xzf "$TARBALL" -C /tmp/audit
+          if grep -rEn 'apier_(test|live)_[A-Za-z0-9_-]{16,}|Bearer [A-Za-z0-9._-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]+|eyJ[A-Za-z0-9._-]{20,}' /tmp/audit/; then
+            echo "::error::token-shaped string found in tarball surface"
+            exit 1
+          fi
+          echo "✅ published surface clean"
 
       - name: Publish to npm with provenance
         run: npm publish --provenance --access public
