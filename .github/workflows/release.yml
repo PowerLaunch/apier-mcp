@@ -71,6 +71,15 @@ jobs:
           echo "✅ published surface clean"
 
       - name: Publish to npm with provenance
-        run: npm publish --provenance --access public
+        # --ignore-scripts: the workflow above already ran lint + test +
+        # build explicitly, then scanned the resulting tarball. Letting
+        # `npm publish` re-trigger `prepublishOnly` (which re-runs build
+        # + test) would rebuild `dist/` and pack a different tarball
+        # than the one we scanned — with deterministic `tsc` the bytes
+        # match today, but the scan-vs-publish artifact identity should
+        # be guaranteed by the workflow, not by a property of the
+        # compiler. Skipping the lifecycle hook makes the published
+        # tarball derive from the same `dist/` the grep step inspected.
+        run: npm publish --provenance --access public --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
