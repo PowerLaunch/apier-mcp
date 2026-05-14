@@ -19,7 +19,7 @@ import { startProxy } from "./index.js";
 // Keep in sync with package.json#version. Hardcoded rather than read at
 // runtime so a bundled binary doesn't need fs access. The build script
 // (and prepublishOnly hook) is the discipline that keeps this honest.
-const VERSION = "0.1.0";
+const VERSION = "0.1.1";
 
 const HELP = `apier-mcp ${VERSION} — Thin proxy to Apier's hosted MCP server.
 

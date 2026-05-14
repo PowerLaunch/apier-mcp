@@ -36,3 +36,31 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Tarball surface secret-leak grep
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm pack
+          TARBALL=$(ls apier-no-mcp-*.tgz | head -1)
+          if [ -z "$TARBALL" ]; then
+            echo "::error::npm pack produced no tarball"
+            exit 1
+          fi
+          echo "=== tarball contents ==="
+          tar -tzf "$TARBALL"
+          mkdir -p /tmp/audit
+          tar -xzf "$TARBALL" -C /tmp/audit
+          echo "=== scanning published surface for token-shaped strings ==="
+          # Regex requires real token-length payloads, so doc placeholders like
+          # `apier_live_...` (literal dots) do NOT match. Tokens of interest:
+          #   - apier_(test|live)_<>=16 url-safe chars
+          #   - Bearer <>=20 token chars
+          #   - ghp_<36 chars>
+          #   - github_pat_<word chars>
+          #   - JWT-shaped eyJ... prefixes
+          if grep -rEn 'apier_(test|live)_[A-Za-z0-9_-]{16,}|Bearer [A-Za-z0-9._-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]+|eyJ[A-Za-z0-9._-]{20,}' /tmp/audit/; then
+            echo "::error::token-shaped string found in tarball surface"
+            exit 1
+          fi
+          echo "✅ published surface clean"
