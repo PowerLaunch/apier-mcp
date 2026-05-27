@@ -1,0 +1,10 @@
+# Gitleaks configuration — allowlist test fixtures
+# Test files use dummy values that trigger false positives.
+# The repo-wide *.test.ts(x) scope is intentional: it mirrors PowerLaunch/apier
+# (the monorepo this config was matched to). Narrowing to src/ was considered
+# (CodeRabbit) and deferred to keep parity with the monorepo (PR #10).
+[allowlist]
+  paths = [
+    '''.*\.test\.ts$''',
+    '''.*\.test\.tsx$''',
+  ]
