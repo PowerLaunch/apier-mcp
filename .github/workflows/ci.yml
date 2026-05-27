@@ -5,62 +5,96 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '20'
           cache: npm
-
-      - name: Install dependencies
-        # Using `npm install` (not `npm ci`) so a lock file generated
-        # on one platform (e.g. Windows dev machine) doesn't fail on
-        # another (Linux CI) when platform-specific optional deps
-        # like @emnapi/core differ. Slightly slower than `npm ci` but
-        # cross-platform reliable.
-        run: npm install --no-audit
-
-      - name: Lint (tsc --noEmit)
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Type-check
         run: npm run lint
-
-      - name: Test (vitest)
+      - name: Test
         run: npm test
-
       - name: Build
         run: npm run build
-
-      - name: Tarball surface secret-leak grep
-        shell: bash
+      - name: Sanity — bin shebang present
         run: |
           set -euo pipefail
-          npm pack
-          TARBALL=$(ls apier-no-mcp-*.tgz | head -1)
-          if [ -z "$TARBALL" ]; then
-            echo "::error::npm pack produced no tarball"
+          head -1 dist/cli.js | grep -q '^#!/usr/bin/env node' || {
+            echo "ERROR: dist/cli.js missing node shebang"
+            exit 1
+          }
+      - name: Sanity — version printed by --version matches package.json
+        run: |
+          set -euo pipefail
+          PKG_VER=$(node -p "require('./package.json').version")
+          CLI_VER=$(node dist/cli.js --version 2>&1 | tail -1 | tr -d '[:space:]')
+          if [ "$PKG_VER" != "$CLI_VER" ]; then
+            echo "ERROR: package.json version ($PKG_VER) != CLI --version ($CLI_VER)"
             exit 1
           fi
-          echo "=== tarball contents ==="
-          tar -tzf "$TARBALL"
-          mkdir -p /tmp/audit
-          tar -xzf "$TARBALL" -C /tmp/audit
-          echo "=== scanning published surface for token-shaped strings ==="
-          # Regex requires real token-length payloads, so doc placeholders like
-          # `apier_live_...` (literal dots) do NOT match. Tokens of interest:
-          #   - apier_(test|live)_<>=16 url-safe chars
-          #   - Bearer <>=20 token chars
-          #   - ghp_<36 chars>
-          #   - github_pat_<word chars>
-          #   - JWT-shaped eyJ... prefixes
-          if grep -rEn 'apier_(test|live)_[A-Za-z0-9_-]{16,}|Bearer [A-Za-z0-9._-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]+|eyJ[A-Za-z0-9._-]{20,}' /tmp/audit/; then
-            echo "::error::token-shaped string found in tarball surface"
+
+  tarball-audit:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run build
+      - name: Pack tarball
+        run: |
+          set -euo pipefail
+          npm pack --pack-destination /tmp/pack
+          ls -la /tmp/pack/
+      - name: Extract tarball
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/unpack
+          tar -xzf /tmp/pack/*.tgz -C /tmp/unpack
+          echo "--- file list ---"
+          find /tmp/unpack -type f | sort
+      - name: Allowlist — only dist/, README.md, SECURITY.md, LICENSE, package.json
+        run: |
+          set -euo pipefail
+          BAD=$(find /tmp/unpack/package -type f \
+                | sed 's|/tmp/unpack/package/||' \
+                | grep -vE '^(dist/.*|README\.md|SECURITY\.md|LICENSE|package\.json)$' || true)
+          if [ -n "$BAD" ]; then
+            echo "ERROR: tarball contains files outside the allowlist:"
+            echo "$BAD"
             exit 1
           fi
-          echo "✅ published surface clean"
+      - name: Blocklist — forbidden patterns must not appear anywhere
+        run: |
+          set -euo pipefail
+          if find /tmp/unpack -type f \
+              \( -name '.env*' -o -name '.npmrc' -o -name '*.pem' -o -name '*.key' \
+                 -o -name '*.local.*' -o -name '.DS_Store' \) | grep -q .; then
+            echo "ERROR: tarball contains forbidden filenames"
+            exit 1
+          fi
+          if grep -rEn \
+            'BEGIN [A-Z ]*PRIVATE KEY|apier_(live|test)_[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._\-+/=]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}' \
+            /tmp/unpack/ ; then
+            echo "ERROR: tarball contents include a secret-shaped string"
+            exit 1
+          fi
+          echo "OK — tarball clean"

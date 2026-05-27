@@ -1,7 +1,7 @@
 {
-  "name": "@apier-no/mcp",
-  "version": "0.1.1",
-  "description": "Thin npm proxy: connect local MCP clients (Claude Desktop, Cursor) to Apier's hosted Norwegian compliance MCP server.",
+  "name": "@apier/mcp",
+  "version": "1.0.0",
+  "description": "Hardened thin proxy: connect local MCP clients (Claude Desktop, Cursor, Zed, Codex) to Apier's hosted Norwegian compliance MCP server at https://www.apier.no/api/mcp. Reads APIER_API_KEY from the environment and scrubs it from the spawned child process before forwarding via --header Authorization: Bearer.",
   "type": "module",
   "bin": {
     "apier-mcp": "dist/cli.js"
@@ -11,49 +11,42 @@
   "files": [
     "dist/",
     "README.md",
+    "SECURITY.md",
     "LICENSE"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=20"
   },
   "scripts": {
     "build": "tsc",
-    "test": "vitest run",
     "lint": "tsc --noEmit",
+    "test": "vitest run",
     "prepublishOnly": "npm run build && npm test"
   },
   "publishConfig": {
-    "access": "public"
+    "access": "public",
+    "provenance": true
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/PowerLaunch/apier-mcp.git"
+    "url": "git+https://github.com/PowerLaunch/apier-mcp.git"
   },
   "homepage": "https://www.apier.no",
   "bugs": {
     "url": "https://github.com/PowerLaunch/apier-mcp/issues"
   },
   "keywords": [
-    "mcp",
-    "model-context-protocol",
-    "apier",
-    "norway",
-    "norwegian-compliance",
-    "altinn",
-    "skatteetaten",
-    "claude",
-    "cursor"
+    "mcp", "model-context-protocol", "apier", "norway",
+    "norwegian-compliance", "altinn", "skatteetaten", "claude", "cursor"
   ],
-  "author": "PowerLaunch AS",
+  "author": "Grov Digital (org.nr. 833 397 982)",
   "license": "MIT",
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "zod": "^4.4.3"
+    "mcp-remote": "0.1.38"
   },
   "devDependencies": {
-    "@types/node": "^25.7.0",
-    "tsx": "^4.21.0",
-    "typescript": "^6.0.3",
-    "vitest": "^4.1.6"
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0"
   }
 }

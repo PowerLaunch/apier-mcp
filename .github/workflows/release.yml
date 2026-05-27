@@ -2,84 +2,58 @@ name: Release
 
 on:
   push:
-    tags:
-      - 'v*.*.*'
+    tags: ['v*.*.*']
 
 permissions:
   contents: read
-  id-token: write   # required for npm provenance attestation
-
-concurrency:
-  group: release-${{ github.ref }}
-  cancel-in-progress: false   # never cancel a publish mid-flight
+  id-token: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    # Fork-publish guard: only the canonical repo can publish under @apier-no.
-    if: github.repository == 'PowerLaunch/apier-mcp'
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
-          node-version: '22'
-          registry-url: 'https://registry.npmjs.org/'
-
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+          cache: npm
+      - name: Install
+        run: npm ci --no-audit --no-fund
       - name: Verify tag matches package.json version
-        shell: bash
         run: |
           set -euo pipefail
-          TAG_VERSION="${GITHUB_REF#refs/tags/v}"
-          PKG_VERSION=$(node -p "require('./package.json').version")
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "::error::tag $TAG_VERSION does not match package.json version $PKG_VERSION"
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(node -p "require('./package.json').version")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "ERROR: tag v$TAG does not match package.json version $PKG"
             exit 1
           fi
-          echo "✅ tag $TAG_VERSION matches package.json"
-
-      - name: Install
-        run: npm install --no-audit
-
-      - name: Lint
+      - name: Type-check
         run: npm run lint
-
       - name: Test
         run: npm test
-
       - name: Build
         run: npm run build
-
-      - name: Tarball surface secret-leak grep
-        shell: bash
+      - name: Pack + audit
         run: |
           set -euo pipefail
-          npm pack
-          TARBALL=$(ls apier-no-mcp-*.tgz | head -1)
-          if [ -z "$TARBALL" ]; then
-            echo "::error::npm pack produced no tarball"
+          npm pack --pack-destination /tmp/pack
+          mkdir -p /tmp/unpack
+          tar -xzf /tmp/pack/*.tgz -C /tmp/unpack
+          BAD=$(find /tmp/unpack/package -type f \
+                | sed 's|/tmp/unpack/package/||' \
+                | grep -vE '^(dist/.*|README\.md|SECURITY\.md|LICENSE|package\.json)$' || true)
+          if [ -n "$BAD" ]; then
+            echo "ERROR: tarball contains files outside allowlist:"
+            echo "$BAD"
             exit 1
           fi
-          echo "=== tarball contents ==="
-          tar -tzf "$TARBALL"
-          mkdir -p /tmp/audit
-          tar -xzf "$TARBALL" -C /tmp/audit
-          if grep -rEn 'apier_(test|live)_[A-Za-z0-9_-]{16,}|Bearer [A-Za-z0-9._-]{20,}|ghp_[A-Za-z0-9]{36}|github_pat_[A-Za-z0-9_]+|eyJ[A-Za-z0-9._-]{20,}' /tmp/audit/; then
-            echo "::error::token-shaped string found in tarball surface"
+          if grep -rEn \
+            'BEGIN [A-Z ]*PRIVATE KEY|apier_(live|test)_[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._\-+/=]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}' \
+            /tmp/unpack/ ; then
+            echo "ERROR: secret-shaped string in tarball"
             exit 1
           fi
-          echo "✅ published surface clean"
-
-      - name: Publish to npm with provenance
-        # --ignore-scripts: the workflow above already ran lint + test +
-        # build explicitly, then scanned the resulting tarball. Letting
-        # `npm publish` re-trigger `prepublishOnly` (which re-runs build
-        # + test) would rebuild `dist/` and pack a different tarball
-        # than the one we scanned — with deterministic `tsc` the bytes
-        # match today, but the scan-vs-publish artifact identity should
-        # be guaranteed by the workflow, not by a property of the
-        # compiler. Skipping the lifecycle hook makes the published
-        # tarball derive from the same `dist/` the grep step inspected.
-        run: npm publish --provenance --access public --ignore-scripts
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish
+        run: npm publish --provenance --access public
