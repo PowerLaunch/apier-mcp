@@ -40,8 +40,8 @@ jobs:
       - name: Pack + audit
         run: |
           set -euo pipefail
+          mkdir -p /tmp/pack /tmp/unpack
           npm pack --pack-destination /tmp/pack
-          mkdir -p /tmp/unpack
           tar -xzf /tmp/pack/*.tgz -C /tmp/unpack
           BAD=$(find /tmp/unpack/package -type f \
                 | sed 's|/tmp/unpack/package/||' \

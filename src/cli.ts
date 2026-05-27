@@ -12,9 +12,15 @@
 
 import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
+import { realpathSync } from "node:fs";
 
 const require = createRequire(import.meta.url);
-const pkg = require("../package.json") as { version: string; name: string };
+const pkg = require("../package.json") as {
+  version: string;
+  name: string;
+  dependencies: Record<string, string>;
+};
 
 const DEFAULT_ENDPOINT = "https://www.apier.no/api/mcp";
 const VERSION = pkg.version;
@@ -167,8 +173,19 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
   delete childEnv.APIER_API_KEY;
   delete childEnv.AUTHORIZATION;
 
+  // Pin the npx-fetched mcp-remote to the exact version package.json declares.
+  // Without @version, `npx -y mcp-remote` silently downloads the LATEST from
+  // npm if it can't find the locally-installed binary, defeating the exact-pin
+  // supply-chain guarantee (Cursor Bugbot, Medium). Single source of truth:
+  // package.json dependencies.
+  const mcpRemoteVersion = pkg.dependencies["mcp-remote"];
+  if (!mcpRemoteVersion) {
+    safeStderr("mcp-remote is not pinned in package.json dependencies; refusing to spawn.\n");
+    return 2;
+  }
+
   const headerValue = `Authorization: Bearer ${apiKey}`;
-  const mcpRemoteArgs = ["-y", "mcp-remote", endpoint.toString(), "--header", headerValue, ...parsed.extra];
+  const mcpRemoteArgs = ["-y", `mcp-remote@${mcpRemoteVersion}`, endpoint.toString(), "--header", headerValue, ...parsed.extra];
 
   const child = spawn("npx", mcpRemoteArgs, {
     env: childEnv,
@@ -206,11 +223,22 @@ process.on("unhandledRejection", (reason) => {
   process.exit(70);
 });
 
-const isDirectInvocation =
-  import.meta.url === `file://${process.argv[1]}` ||
-  import.meta.url.endsWith(process.argv[1]?.replace(/\\/g, "/") ?? "");
+// True only when this file is the process entry point. Compares the real
+// (symlink-resolved) path of this module against argv[1], which is robust for
+// npm bin symlinks. The old endsWith() heuristic matched on any path suffix,
+// and with the `?? ""` fallback endsWith("") was always true (Cursor Bugbot,
+// Medium) — so importing the module could spawn mcp-remote unexpectedly.
+function isMainModule(): boolean {
+  const entry = process.argv[1];
+  if (entry === undefined) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(entry);
+  } catch {
+    return false;
+  }
+}
 
-if (isDirectInvocation) {
+if (isMainModule()) {
   main(process.argv.slice(2), process.env).then(
     (code) => process.exit(code),
     (err) => {

@@ -62,6 +62,7 @@ jobs:
       - name: Pack tarball
         run: |
           set -euo pipefail
+          mkdir -p /tmp/pack
           npm pack --pack-destination /tmp/pack
           ls -la /tmp/pack/
       - name: Extract tarball
