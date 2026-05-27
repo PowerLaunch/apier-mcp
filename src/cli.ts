@@ -213,15 +213,21 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
   });
 }
 
-process.on("uncaughtException", (err) => {
-  safeStderr(`uncaughtException: ${redact(err.stack ?? err.message)}\n`);
-  process.exit(70);
-});
-process.on("unhandledRejection", (reason) => {
-  const msg = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
-  safeStderr(`unhandledRejection: ${redact(msg)}\n`);
-  process.exit(70);
-});
+// Registered ONLY when run as the CLI entry point (see isMainModule below),
+// never as an import side effect — these call process.exit(70), which would
+// otherwise terminate any app that imports @apier/mcp on an unrelated
+// unhandled error (Cursor Bugbot, Medium).
+function installGlobalErrorHandlers(): void {
+  process.on("uncaughtException", (err) => {
+    safeStderr(`uncaughtException: ${redact(err.stack ?? err.message)}\n`);
+    process.exit(70);
+  });
+  process.on("unhandledRejection", (reason) => {
+    const msg = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
+    safeStderr(`unhandledRejection: ${redact(msg)}\n`);
+    process.exit(70);
+  });
+}
 
 // True only when this file is the process entry point. Compares the real
 // (symlink-resolved) path of this module against argv[1], which is robust for
@@ -239,6 +245,7 @@ function isMainModule(): boolean {
 }
 
 if (isMainModule()) {
+  installGlobalErrorHandlers();
   main(process.argv.slice(2), process.env).then(
     (code) => process.exit(code),
     (err) => {
