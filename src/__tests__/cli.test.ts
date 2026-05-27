@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
-import { buildChildEnv, createStderrRedactor, resolveMcpRemoteEntry, signalExitCode } from "../cli.js";
+import { main, buildChildEnv, createStderrRedactor, resolveMcpRemoteEntry, signalExitCode } from "../cli.js";
 
 describe("buildChildEnv — env scrubbing", () => {
   it("strips APIER_API_KEY from the child environment", () => {
@@ -140,5 +140,24 @@ describe("signalExitCode", () => {
   it("returns 128 + signal number (SIGINT -> 130, SIGTERM -> 143)", () => {
     expect(signalExitCode("SIGINT")).toBe(130);
     expect(signalExitCode("SIGTERM")).toBe(143);
+  });
+});
+
+describe("main --help", () => {
+  it("prints help verbatim without redacting the documented Authorization header", async () => {
+    const chunks: string[] = [];
+    const original = process.stderr.write;
+    process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+      chunks.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      expect(await main(["--help"], {} as NodeJS.ProcessEnv)).toBe(0);
+    } finally {
+      process.stderr.write = original;
+    }
+    const out = chunks.join("");
+    expect(out).toContain("Authorization: Bearer");
+    expect(out).not.toContain("***REDACTED***");
   });
 });

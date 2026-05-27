@@ -204,7 +204,10 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
   try { parsed = parseArgs(argv); }
   catch (e) { safeStderr(`${(e as Error).message}\n`); return 2; }
 
-  if (parsed.showHelp) { safeStderr(HELP); return 0; }
+  // HELP is a trusted static constant; write it verbatim. Routing it through
+  // safeStderr() would let redact() mangle the documented literal
+  // "Authorization: Bearer." into "***REDACTED***" (Cursor Bugbot, Medium).
+  if (parsed.showHelp) { process.stderr.write(HELP); return 0; }
   if (parsed.showVersion) { safeStderr(`${VERSION}\n`); return 0; }
 
   const apiKey = env.APIER_API_KEY;
