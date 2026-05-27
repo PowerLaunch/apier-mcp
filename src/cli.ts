@@ -81,7 +81,7 @@ interface ParsedArgs {
   extra: string[];
 }
 
-function parseArgs(argv: string[]): ParsedArgs {
+export function parseArgs(argv: string[]): ParsedArgs {
   const out: ParsedArgs = {
     endpoint: DEFAULT_ENDPOINT,
     showHelp: false,
@@ -93,7 +93,11 @@ function parseArgs(argv: string[]): ParsedArgs {
     if (a === undefined) continue;
     if (a === "--help" || a === "-h") out.showHelp = true;
     else if (a === "--version" || a === "-v") out.showVersion = true;
-    else if (a === "--endpoint") {
+    else if (a.startsWith("--endpoint=")) {
+      const v = a.slice("--endpoint=".length);
+      if (!v) throw new Error("--endpoint requires a URL argument");
+      out.endpoint = v;
+    } else if (a === "--endpoint") {
       const v = argv[++i];
       if (!v) throw new Error("--endpoint requires a URL argument");
       out.endpoint = v;
@@ -103,6 +107,12 @@ function parseArgs(argv: string[]): ParsedArgs {
           "https-only. If you have a legitimate non-https use case (local " +
           "dev mirror), use mcp-remote directly."
       );
+    } else if (a.startsWith("-")) {
+      // Reject unknown flags rather than silently forwarding them to mcp-remote,
+      // where a URL-shaped extra could become mcp-remote's server target and
+      // route the Authorization: Bearer header to an unintended host
+      // (Cursor Bugbot BUG_ID b8abd54a; AUDIT-PR10-PREMERGE-DEEPDEBUG).
+      throw new Error(`Unknown flag: ${a}. Run apier-mcp --help for supported options.`);
     } else {
       out.extra.push(a);
     }

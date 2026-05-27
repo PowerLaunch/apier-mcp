@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
-import { main, buildChildEnv, createStderrRedactor, resolveMcpRemoteEntry, signalExitCode } from "../cli.js";
+import { main, parseArgs, buildChildEnv, createStderrRedactor, resolveMcpRemoteEntry, signalExitCode } from "../cli.js";
 
 describe("buildChildEnv — env scrubbing", () => {
   it("strips APIER_API_KEY from the child environment", () => {
@@ -170,5 +170,25 @@ describe("main --help", () => {
     const out = chunks.join("");
     expect(out).toContain("Authorization: Bearer");
     expect(out).not.toContain("***REDACTED***");
+  });
+});
+
+describe("parseArgs — unknown args", () => {
+  it("rejects an unknown long flag with a clear error", () => {
+    expect(() => parseArgs(["--endpont", "https://example.com/mcp"])).toThrow(/Unknown flag: --endpont/);
+  });
+
+  it("rejects an unknown short flag", () => {
+    expect(() => parseArgs(["-x"])).toThrow(/Unknown flag: -x/);
+  });
+
+  it("accepts --endpoint=<url> equals-syntax", () => {
+    const parsed = parseArgs(["--endpoint=https://example.com/mcp"]);
+    expect(parsed.endpoint).toBe("https://example.com/mcp");
+  });
+
+  it("still accepts non-dash positionals into extra", () => {
+    const parsed = parseArgs(["8080"]);
+    expect(parsed.extra).toContain("8080");
   });
 });
