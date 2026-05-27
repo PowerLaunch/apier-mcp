@@ -25,6 +25,21 @@ describe("buildChildEnv — env scrubbing", () => {
     expect(child.PATH).toBe("/usr/bin");
   });
 
+  it("denies a NODE_-prefixed var containing a secret substring (NODE_AUTH_TOKEN) but keeps benign NODE_ vars", () => {
+    // Regression (Cursor Bugbot, High): deny must beat the NODE_/LC_ prefix
+    // passthrough, or npm's NODE_AUTH_TOKEN rides startsWith("NODE_") into the
+    // child env and bypasses the deny list.
+    const parent = {
+      NODE_AUTH_TOKEN: "npm_secrettokenvalue",
+      NODE_OPTIONS: "--max-old-space-size=4096",
+      PATH: "/usr/bin",
+    } as NodeJS.ProcessEnv;
+    const child = buildChildEnv(parent);
+    expect(child.NODE_AUTH_TOKEN).toBeUndefined();
+    expect(child.NODE_OPTIONS).toBe("--max-old-space-size=4096");
+    expect(child.PATH).toBe("/usr/bin");
+  });
+
   it("passes through PATH, HOME, USER, LANG, TMPDIR", () => {
     const parent = {
       PATH: "/usr/bin", HOME: "/home/u", USER: "u",

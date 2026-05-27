@@ -115,12 +115,17 @@ export function buildChildEnv(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const child: NodeJS.ProcessEnv = {};
   for (const [k, v] of Object.entries(parent)) {
     if (v === undefined) continue;
-    if (ENV_PASSTHROUGH_ALLOWLIST.has(k)) { child[k] = v; continue; }
     const upper = k.toUpperCase();
+    // Deny takes precedence over every passthrough rule below (including the
+    // NODE_/LC_ prefixes). Without deny-first, NODE_AUTH_TOKEN matched
+    // startsWith("NODE_") and leaked into the child env, bypassing the deny
+    // list (Cursor Bugbot, High). No exact-allowlist name contains a deny
+    // substring, so deny-first never blocks a legitimate passthrough.
+    if (ENV_DENY_SUBSTRINGS.some((s) => upper.includes(s))) continue;
+    if (ENV_PASSTHROUGH_ALLOWLIST.has(k)) { child[k] = v; continue; }
     if (ENV_PASSTHROUGH_ALLOWLIST.has(upper)) { child[k] = v; continue; }
     if (upper.startsWith("LC_")) { child[k] = v; continue; }
     if (upper.startsWith("NODE_")) { child[k] = v; continue; }
-    if (ENV_DENY_SUBSTRINGS.some((s) => upper.includes(s))) continue;
   }
   return child;
 }
