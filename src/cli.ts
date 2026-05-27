@@ -14,12 +14,12 @@ import { spawn } from "node:child_process";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
+import { dirname as pathDirname, resolve as pathResolve } from "node:path";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as {
   version: string;
   name: string;
-  dependencies: Record<string, string>;
 };
 
 const DEFAULT_ENDPOINT = "https://www.apier.no/api/mcp";
@@ -179,6 +179,17 @@ function validateEndpoint(raw: string): URL {
   return u;
 }
 
+// Resolve mcp-remote's bin entry (dist/proxy.js) from its installed
+// package.json, so it can be run with the current Node binary instead of npx.
+// Exported for tests. Throws if mcp-remote or its bin entry can't be found.
+export function resolveMcpRemoteEntry(): string {
+  const pkgJsonPath = require.resolve("mcp-remote/package.json");
+  const mcpPkg = require("mcp-remote/package.json") as { bin?: Record<string, string> };
+  const binRel = mcpPkg.bin?.["mcp-remote"];
+  if (!binRel) throw new Error("mcp-remote package.json has no 'mcp-remote' bin entry");
+  return pathResolve(pathDirname(pkgJsonPath), binRel);
+}
+
 export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<number> {
   let parsed: ParsedArgs;
   try { parsed = parseArgs(argv); }
@@ -204,21 +215,25 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
   delete childEnv.APIER_API_KEY;
   delete childEnv.AUTHORIZATION;
 
-  // Pin the npx-fetched mcp-remote to the exact version package.json declares.
-  // Without @version, `npx -y mcp-remote` silently downloads the LATEST from
-  // npm if it can't find the locally-installed binary, defeating the exact-pin
-  // supply-chain guarantee (Cursor Bugbot, Medium). Single source of truth:
-  // package.json dependencies.
-  const mcpRemoteVersion = pkg.dependencies["mcp-remote"];
-  if (!mcpRemoteVersion) {
-    safeStderr("mcp-remote is not pinned in package.json dependencies; refusing to spawn.\n");
-    return 2;
+  // Run mcp-remote's resolved bin with the current Node binary instead of npx.
+  // Cross-platform: spawn("npx", …, { shell:false }) fails on Windows because
+  // npx is npx.cmd and Node won't run a .cmd without a shell — and a shell
+  // would mis-split our space-bearing --header arg (Cursor Bugbot, Medium).
+  // Using process.execPath on the resolved .js also removes any npx
+  // fallback-download path, so only the exact installed (pinned) mcp-remote
+  // can ever run.
+  let mcpRemoteEntry: string;
+  try {
+    mcpRemoteEntry = resolveMcpRemoteEntry();
+  } catch (e) {
+    safeStderr(`Could not locate the mcp-remote binary: ${redact((e as Error).message)}\n`);
+    return 127;
   }
 
   const headerValue = `Authorization: Bearer ${apiKey}`;
-  const mcpRemoteArgs = ["-y", `mcp-remote@${mcpRemoteVersion}`, endpoint.toString(), "--header", headerValue, ...parsed.extra];
+  const mcpRemoteArgs = [mcpRemoteEntry, endpoint.toString(), "--header", headerValue, ...parsed.extra];
 
-  const child = spawn("npx", mcpRemoteArgs, {
+  const child = spawn(process.execPath, mcpRemoteArgs, {
     env: childEnv,
     stdio: ["inherit", "inherit", "pipe"],
     shell: false,

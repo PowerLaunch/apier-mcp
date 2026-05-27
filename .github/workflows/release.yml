@@ -4,6 +4,12 @@ on:
   push:
     tags: ['v*.*.*']
 
+# Serialize releases: never cancel a publish mid-flight, and don't let two
+# tag pushes publish concurrently (Cursor Bugbot, Low).
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
   id-token: write

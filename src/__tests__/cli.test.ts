@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { buildChildEnv, createStderrRedactor } from "../cli.js";
+import { existsSync } from "node:fs";
+import { buildChildEnv, createStderrRedactor, resolveMcpRemoteEntry } from "../cli.js";
 
 describe("buildChildEnv — env scrubbing", () => {
   it("strips APIER_API_KEY from the child environment", () => {
@@ -124,5 +125,13 @@ describe("createStderrRedactor — line-buffered stderr redaction", () => {
     const joined = out.join("");
     expect(joined).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123");
     expect(joined).toContain("***REDACTED***");
+  });
+});
+
+describe("resolveMcpRemoteEntry", () => {
+  it("resolves to mcp-remote's bin entry, which exists on disk", () => {
+    const entry = resolveMcpRemoteEntry();
+    expect(entry).toMatch(/proxy\.js$/);
+    expect(existsSync(entry)).toBe(true);
   });
 });
