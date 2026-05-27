@@ -15,6 +15,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { realpathSync } from "node:fs";
 import { dirname as pathDirname, resolve as pathResolve } from "node:path";
+import { constants as osConstants } from "node:os";
 
 const require = createRequire(import.meta.url);
 const pkg = require("../package.json") as {
@@ -190,6 +191,14 @@ export function resolveMcpRemoteEntry(): string {
   return pathResolve(pathDirname(pkgJsonPath), binRel);
 }
 
+// Map a terminating signal to the conventional Unix exit code 128 + signum
+// (SIGINT -> 130, SIGTERM -> 143) so callers inspecting $? can tell which
+// signal killed the child (Cursor Bugbot, Low). Exported for tests.
+export function signalExitCode(signal: NodeJS.Signals): number {
+  const signals = osConstants.signals as Record<string, number | undefined>;
+  return 128 + (signals[signal] ?? 0);
+}
+
 export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<number> {
   let parsed: ParsedArgs;
   try { parsed = parseArgs(argv); }
@@ -265,7 +274,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
       done(127);
     });
     child.on("exit", (code, signal) => {
-      if (signal) { safeStderr(`mcp-remote terminated by signal ${signal}\n`); done(128); return; }
+      if (signal) { safeStderr(`mcp-remote terminated by signal ${signal}\n`); done(signalExitCode(signal)); return; }
       done(code ?? 1);
     });
     process.on("SIGINT", onSigint);

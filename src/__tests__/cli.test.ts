@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { existsSync } from "node:fs";
-import { buildChildEnv, createStderrRedactor, resolveMcpRemoteEntry } from "../cli.js";
+import { buildChildEnv, createStderrRedactor, resolveMcpRemoteEntry, signalExitCode } from "../cli.js";
 
 describe("buildChildEnv — env scrubbing", () => {
   it("strips APIER_API_KEY from the child environment", () => {
@@ -133,5 +133,12 @@ describe("resolveMcpRemoteEntry", () => {
     const entry = resolveMcpRemoteEntry();
     expect(entry).toMatch(/proxy\.js$/);
     expect(existsSync(entry)).toBe(true);
+  });
+});
+
+describe("signalExitCode", () => {
+  it("returns 128 + signal number (SIGINT -> 130, SIGTERM -> 143)", () => {
+    expect(signalExitCode("SIGINT")).toBe(130);
+    expect(signalExitCode("SIGTERM")).toBe(143);
   });
 });
