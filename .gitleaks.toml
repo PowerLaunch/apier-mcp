@@ -1,0 +1,7 @@
+# Gitleaks configuration — allowlist test fixtures
+# Test files use dummy values that trigger false positives
+[allowlist]
+  paths = [
+    '''.*\.test\.ts$''',
+    '''.*\.test\.tsx$''',
+  ]
