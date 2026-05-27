@@ -42,6 +42,37 @@ function safeStderr(s: string): void {
   process.stderr.write(redact(s));
 }
 
+/**
+ * Line-buffered redactor for a child's stderr stream. Stream "data" events
+ * split at arbitrary byte boundaries, so redacting each chunk independently
+ * lets a secret straddling two chunks ("Bear" + "er apier_live_…") slip
+ * through unredacted (Cursor Bugbot, Medium). We accumulate until a newline
+ * and redact whole lines — secrets contain no newlines, so each token is
+ * matched in one piece. flush() emits any trailing partial line on stream end.
+ * Exported for tests.
+ */
+export function createStderrRedactor(write: (s: string) => void): {
+  push: (chunk: string) => void;
+  flush: () => void;
+} {
+  let buffer = "";
+  const drain = (final: boolean): void => {
+    let nl: number;
+    while ((nl = buffer.indexOf("\n")) !== -1) {
+      write(redact(buffer.slice(0, nl + 1)));
+      buffer = buffer.slice(nl + 1);
+    }
+    if (final && buffer.length > 0) {
+      write(redact(buffer));
+      buffer = "";
+    }
+  };
+  return {
+    push: (chunk: string): void => { buffer += chunk; drain(false); },
+    flush: (): void => drain(true),
+  };
+}
+
 interface ParsedArgs {
   endpoint: string;
   showHelp: boolean;
@@ -194,11 +225,26 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
     windowsHide: true,
   });
 
-  child.stderr.on("data", (buf: Buffer) => { safeStderr(buf.toString("utf8")); });
+  const stderrRedactor = createStderrRedactor((s) => { process.stderr.write(s); });
+  child.stderr.on("data", (buf: Buffer) => stderrRedactor.push(buf.toString("utf8")));
+  child.stderr.on("end", () => stderrRedactor.flush());
 
   return await new Promise<number>((resolve) => {
     let settled = false;
-    const done = (code: number) => { if (settled) return; settled = true; resolve(code); };
+    const onSignal = (sig: NodeJS.Signals) => () => { if (!child.killed) child.kill(sig); };
+    const onSigint = onSignal("SIGINT");
+    const onSigterm = onSignal("SIGTERM");
+    const done = (code: number) => {
+      if (settled) return;
+      settled = true;
+      // Remove our process-level signal listeners on settle so they don't
+      // accumulate or suppress Node's default signal-exit once main() resolves
+      // — main() is exported and may be called programmatically (Bugbot, Low).
+      process.removeListener("SIGINT", onSigint);
+      process.removeListener("SIGTERM", onSigterm);
+      stderrRedactor.flush();
+      resolve(code);
+    };
     child.on("error", (err) => {
       safeStderr(`Failed to spawn mcp-remote: ${redact(err.message)}\n`);
       done(127);
@@ -207,9 +253,8 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
       if (signal) { safeStderr(`mcp-remote terminated by signal ${signal}\n`); done(128); return; }
       done(code ?? 1);
     });
-    const forward = (sig: NodeJS.Signals) => () => { if (!child.killed) child.kill(sig); };
-    process.on("SIGINT", forward("SIGINT"));
-    process.on("SIGTERM", forward("SIGTERM"));
+    process.on("SIGINT", onSigint);
+    process.on("SIGTERM", onSigterm);
   });
 }
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { buildChildEnv } from "../cli.js";
+import { buildChildEnv, createStderrRedactor } from "../cli.js";
 
 describe("buildChildEnv — env scrubbing", () => {
   it("strips APIER_API_KEY from the child environment", () => {
@@ -100,5 +100,29 @@ describe("redaction patterns", () => {
     expect(src).toMatch(/apier_\(live\|test\)_/);
     expect(src).toMatch(/ghp_/);
     expect(src).toMatch(/Authorization:/);
+  });
+});
+
+describe("createStderrRedactor — line-buffered stderr redaction", () => {
+  it("redacts a secret split across two stderr chunks", () => {
+    const out: string[] = [];
+    const r = createStderrRedactor((s) => out.push(s));
+    // The token straddles the chunk boundary; neither chunk matches alone.
+    r.push("mcp-remote log: Bearer ");
+    r.push("apier_live_abcd1234efgh\n");
+    const joined = out.join("");
+    expect(joined).not.toContain("apier_live_abcd1234efgh");
+    expect(joined).toContain("***REDACTED***");
+  });
+
+  it("buffers until newline and flush() emits the trailing partial line redacted", () => {
+    const out: string[] = [];
+    const r = createStderrRedactor((s) => out.push(s));
+    r.push("trailing ghp_abcdefghijklmnopqrstuvwxyz0123");
+    expect(out.join("")).toBe(""); // nothing emitted before a newline
+    r.flush();
+    const joined = out.join("");
+    expect(joined).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123");
+    expect(joined).toContain("***REDACTED***");
   });
 });
