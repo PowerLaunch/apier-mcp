@@ -26,18 +26,20 @@ describe("buildChildEnv — env scrubbing", () => {
     expect(child.PATH).toBe("/usr/bin");
   });
 
-  it("denies a NODE_-prefixed var containing a secret substring (NODE_AUTH_TOKEN) but keeps benign NODE_ vars", () => {
-    // Regression (Cursor Bugbot, High): deny must beat the NODE_/LC_ prefix
-    // passthrough, or npm's NODE_AUTH_TOKEN rides startsWith("NODE_") into the
-    // child env and bypasses the deny list.
+  it("drops ALL NODE_-prefixed vars (NODE_OPTIONS preload RCE, NODE_TLS_REJECT_UNAUTHORIZED TLS bypass)", () => {
+    // NODE_* is no longer forwarded at all (CodeRabbit, Major): NODE_OPTIONS can
+    // --require arbitrary modules into the child and NODE_TLS_REJECT_UNAUTHORIZED=0
+    // disables TLS verification — both would undermine the proxy's guarantees.
     const parent = {
       NODE_AUTH_TOKEN: "npm_secrettokenvalue",
-      NODE_OPTIONS: "--max-old-space-size=4096",
+      NODE_OPTIONS: "--require /tmp/evil.js",
+      NODE_TLS_REJECT_UNAUTHORIZED: "0",
       PATH: "/usr/bin",
     } as NodeJS.ProcessEnv;
     const child = buildChildEnv(parent);
     expect(child.NODE_AUTH_TOKEN).toBeUndefined();
-    expect(child.NODE_OPTIONS).toBe("--max-old-space-size=4096");
+    expect(child.NODE_OPTIONS).toBeUndefined();
+    expect(child.NODE_TLS_REJECT_UNAUTHORIZED).toBeUndefined();
     expect(child.PATH).toBe("/usr/bin");
   });
 

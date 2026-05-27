@@ -154,16 +154,17 @@ export function buildChildEnv(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   for (const [k, v] of Object.entries(parent)) {
     if (v === undefined) continue;
     const upper = k.toUpperCase();
-    // Deny takes precedence over every passthrough rule below (including the
-    // NODE_/LC_ prefixes). Without deny-first, NODE_AUTH_TOKEN matched
-    // startsWith("NODE_") and leaked into the child env, bypassing the deny
-    // list (Cursor Bugbot, High). No exact-allowlist name contains a deny
-    // substring, so deny-first never blocks a legitimate passthrough.
+    // Deny first: any name containing a secret substring is never forwarded,
+    // so it cannot ride a later allow rule (Cursor Bugbot, High).
     if (ENV_DENY_SUBSTRINGS.some((s) => upper.includes(s))) continue;
     if (ENV_PASSTHROUGH_ALLOWLIST.has(k)) { child[k] = v; continue; }
     if (ENV_PASSTHROUGH_ALLOWLIST.has(upper)) { child[k] = v; continue; }
     if (upper.startsWith("LC_")) { child[k] = v; continue; }
-    if (upper.startsWith("NODE_")) { child[k] = v; continue; }
+    // NODE_* is deliberately NOT forwarded: NODE_OPTIONS can --require/--import
+    // arbitrary modules into the child (which could read the bearer token passed
+    // on argv) and NODE_TLS_REJECT_UNAUTHORIZED=0 disables TLS verification —
+    // both undermine the proxy's TLS + secret-handling guarantees (CodeRabbit,
+    // Major). Add a specific safe NODE_ var to the exact allowlist if needed.
   }
   return child;
 }
@@ -276,7 +277,10 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
       safeStderr(`Failed to spawn mcp-remote: ${redact(err.message)}\n`);
       done(127);
     });
-    child.on("exit", (code, signal) => {
+    // Resolve on "close" (all stdio drained), not "exit": stderr pipe data can
+    // still be in flight when "exit" fires, and the entry point calls
+    // process.exit() in a microtask that would drop it (Cursor Bugbot, Low).
+    child.on("close", (code, signal) => {
       if (signal) { safeStderr(`mcp-remote terminated by signal ${signal}\n`); done(signalExitCode(signal)); return; }
       done(code ?? 1);
     });
