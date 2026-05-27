@@ -17,6 +17,9 @@ permissions:
 jobs:
   publish:
     runs-on: ubuntu-latest
+    # Defense in depth: never let a fork's tag push trigger a real publish,
+    # even with OIDC. Restores the pre-rebrand guard (Cursor Bugbot, Low).
+    if: github.repository == 'PowerLaunch/apier-mcp'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

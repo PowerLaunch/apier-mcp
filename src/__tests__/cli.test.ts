@@ -126,6 +126,15 @@ describe("createStderrRedactor — line-buffered stderr redaction", () => {
     expect(joined).not.toContain("ghp_abcdefghijklmnopqrstuvwxyz0123");
     expect(joined).toContain("***REDACTED***");
   });
+
+  it("redacts a lowercase 'bearer <token>' (case-insensitive Bearer pattern)", () => {
+    const out: string[] = [];
+    const r = createStderrRedactor((s) => out.push(s));
+    r.push("debug authorization: bearer sometokenvalue1234567\n");
+    const joined = out.join("");
+    expect(joined).not.toContain("sometokenvalue1234567");
+    expect(joined).toContain("***REDACTED***");
+  });
 });
 
 describe("resolveMcpRemoteEntry", () => {

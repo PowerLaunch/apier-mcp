@@ -27,7 +27,7 @@ const DEFAULT_ENDPOINT = "https://www.apier.no/api/mcp";
 const VERSION = pkg.version;
 
 const SECRET_PATTERNS: RegExp[] = [
-  /Bearer\s+[A-Za-z0-9._\-+/=]{8,}/g,
+  /Bearer\s+[A-Za-z0-9._\-+/=]{8,}/gi,
   /apier_(live|test)_[A-Za-z0-9_\-]{8,}/g,
   /ghp_[A-Za-z0-9]{20,}/g,
   /Authorization:\s*[^\s,;]+/gi,
