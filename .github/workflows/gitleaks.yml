@@ -10,6 +10,8 @@ on:
   schedule:
     - cron: "0 6 * * 1"
 
+# Actions tracked at @v4 / @v2 (major tags) per PowerLaunch org convention,
+# matching the monorepo. SHA-pinning deferred for org-wide consistency (PR #10).
 jobs:
   gitleaks:
     name: Gitleaks
@@ -23,6 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Run Gitleaks
         uses: gitleaks/gitleaks-action@v2
         env:

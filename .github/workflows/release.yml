@@ -14,6 +14,9 @@ permissions:
   contents: read
   id-token: write
 
+# Actions are tracked at @v4 (major tag) per PowerLaunch org convention,
+# matching the monorepo (PowerLaunch/apier). SHA-pinning was considered
+# (CodeRabbit) and deferred for org-wide consistency (PR #10).
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -22,6 +25,8 @@ jobs:
     if: github.repository == 'PowerLaunch/apier-mcp'
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -61,7 +66,7 @@ jobs:
             exit 1
           fi
           if grep -rEn \
-            'BEGIN [A-Z ]*PRIVATE KEY|apier_(live|test)_[A-Za-z0-9_-]{8,}|Bearer\s+[A-Za-z0-9._+/=-]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}' \
+            'BEGIN [A-Z ]*PRIVATE KEY|apier_(live|test)_[A-Za-z0-9_-]{8,}|Bearer[[:space:]]+[A-Za-z0-9._+/=-]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}' \
             /tmp/unpack/ ; then
             echo "ERROR: secret-shaped string in tarball"
             exit 1
