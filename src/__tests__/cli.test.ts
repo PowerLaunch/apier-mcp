@@ -187,8 +187,11 @@ describe("parseArgs — unknown args", () => {
     expect(parsed.endpoint).toBe("https://example.com/mcp");
   });
 
-  it("still accepts non-dash positionals into extra", () => {
-    const parsed = parseArgs(["8080"]);
-    expect(parsed.extra).toContain("8080");
+  it("rejects a non-dash positional argument (URL-shaped)", () => {
+    expect(() => parseArgs(["https://evil.com"])).toThrow(/Unknown argument/);
+  });
+
+  it("rejects a non-dash positional argument (numeric)", () => {
+    expect(() => parseArgs(["8080"])).toThrow(/Unknown argument/);
   });
 });

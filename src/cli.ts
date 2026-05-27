@@ -78,7 +78,6 @@ interface ParsedArgs {
   endpoint: string;
   showHelp: boolean;
   showVersion: boolean;
-  extra: string[];
 }
 
 export function parseArgs(argv: string[]): ParsedArgs {
@@ -86,7 +85,6 @@ export function parseArgs(argv: string[]): ParsedArgs {
     endpoint: DEFAULT_ENDPOINT,
     showHelp: false,
     showVersion: false,
-    extra: [],
   };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
@@ -108,13 +106,15 @@ export function parseArgs(argv: string[]): ParsedArgs {
           "dev mirror), use mcp-remote directly."
       );
     } else if (a.startsWith("-")) {
-      // Reject unknown flags rather than silently forwarding them to mcp-remote,
-      // where a URL-shaped extra could become mcp-remote's server target and
-      // route the Authorization: Bearer header to an unintended host
-      // (Cursor Bugbot BUG_ID b8abd54a; AUDIT-PR10-PREMERGE-DEEPDEBUG).
       throw new Error(`Unknown flag: ${a}. Run apier-mcp --help for supported options.`);
     } else {
-      out.extra.push(a);
+      // Reject non-flag positionals too. mcp-remote 0.1.38 parses args[0] as the
+      // server URL and args[1] as the OAuth callback port; we always supply the
+      // trusted endpoint as args[0], so a forwarded positional would only become
+      // a malformed port (parseInt("https://...") = NaN) — the Bearer header is
+      // never re-routed. Rejecting here keeps the guard consistent and avoids
+      // footguns if mcp-remote's positional ordering ever changes upstream.
+      throw new Error(`Unknown argument: ${a}. Run apier-mcp --help for supported options.`);
     }
   }
   return out;
@@ -254,7 +254,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
   }
 
   const headerValue = `Authorization: Bearer ${apiKey}`;
-  const mcpRemoteArgs = [mcpRemoteEntry, endpoint.toString(), "--header", headerValue, ...parsed.extra];
+  const mcpRemoteArgs = [mcpRemoteEntry, endpoint.toString(), "--header", headerValue];
 
   const child = spawn(process.execPath, mcpRemoteArgs, {
     env: childEnv,
