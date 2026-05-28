@@ -376,6 +376,11 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
     let settled = false;
     let authFrameEmitted = false;
     let timedOut = false;
+    // childExited tracks ACTUAL process termination (set on the child's close
+    // event below). Node flips child.killed = true the moment child.kill() is
+    // called — even for SIGTERM which only requests exit — so guarding the
+    // SIGKILL escalation on !child.killed never fires (Cursor BugBot, Medium).
+    let childExited = false;
     let killTimer: ReturnType<typeof setTimeout> | null = null;
     let watchdog: ReturnType<typeof setTimeout> | null = null;
 
@@ -388,7 +393,8 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
       emitFrame(TIMEOUT_MESSAGE);
       if (!child.killed) child.kill("SIGTERM");
       killTimer = setTimeout(() => {
-        if (!child.killed) child.kill("SIGKILL");
+        // Escalate only if the child hasn't actually exited yet.
+        if (!childExited) child.kill("SIGKILL");
       }, KILL_GRACE_MS);
     };
     const armWatchdog = (): void => {
@@ -452,6 +458,9 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
     // still be in flight when "exit" fires, and the entry point calls
     // process.exit() in a microtask that would drop it (Cursor Bugbot, Low).
     child.on("close", (code, signal) => {
+      // Single source of truth for "child actually exited" — read by the
+      // SIGKILL guard above so escalation skips when SIGTERM already worked.
+      childExited = true;
       if (signal) { safeStderr(`mcp-remote terminated by signal ${signal}\n`); done(signalExitCode(signal)); return; }
       done(code ?? 1);
     });

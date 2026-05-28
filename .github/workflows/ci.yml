@@ -111,17 +111,24 @@ jobs:
           echo "OK — tarball clean"
 
   # Gated live-auth smoke job (PR-083b). Exercises the built CLI against the
-  # real www.apier.no MCP endpoint using a CI-only API key. The `if:` gate
-  # skips this job cleanly on forks and on PRs from contributors without
-  # access to APIER_API_KEY_CI — it is NOT a required check. The secret is
-  # never `echo`'d; GitHub Actions auto-masks it in logs, and it is forwarded
-  # to the CLI only via the APIER_API_KEY env var (which the CLI in turn
-  # passes onward via --header argv after scrubbing it from the child env).
+  # real www.apier.no MCP endpoint using a CI-only API key. Gating is split:
+  # the job-level `if:` is the canonical-repo guard; the smoke STEP's `if:`
+  # checks the secret via job-level env (CodeRabbit, Major: `secrets.*` is
+  # unavailable in a job-level `if:` expression, so the secret-present test
+  # must run at step level against env). The key is never `echo`'d — GitHub
+  # auto-masks it in logs — and it is forwarded to the CLI only via the
+  # APIER_API_KEY env var (which the CLI in turn passes onward via --header
+  # argv after scrubbing it from the child env).
   live-auth:
     runs-on: ubuntu-latest
     needs: build
-    if: ${{ github.repository == 'PowerLaunch/apier-mcp' && secrets.APIER_API_KEY_CI != '' }}
+    if: ${{ github.repository == 'PowerLaunch/apier-mcp' }}
     timeout-minutes: 5
+    env:
+      # Bind the secret to job-level env so the step-level `if:` below can
+      # test it. env declared at the SAME step is not yet in scope when that
+      # step's `if:` is evaluated, so the gating env MUST live at job level.
+      APIER_API_KEY_CI: ${{ secrets.APIER_API_KEY_CI }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -135,15 +142,23 @@ jobs:
       - name: Build
         run: npm run build
       - name: Live MCP smoke test against www.apier.no
+        # Skip cleanly on forks / contributors without access to the secret.
+        # On the canonical repo with the secret bound, env.APIER_API_KEY_CI is
+        # the real value; on forks it is the empty string and this step is
+        # skipped. The earlier steps (checkout/setup-node/install/build) still
+        # run on forks but are inexpensive no-ops without this smoke step.
+        if: ${{ env.APIER_API_KEY_CI != '' }}
         shell: bash
         env:
-          APIER_API_KEY: ${{ secrets.APIER_API_KEY_CI }}
+          # The CLI reads APIER_API_KEY. Reuse the job-env binding instead of
+          # referencing secrets.* twice.
+          APIER_API_KEY: ${{ env.APIER_API_KEY_CI }}
         run: |
           set -eu
           # Send one JSON-RPC initialize on stdin, capture up to 45s of stdout,
           # then validate that a real JSON-RPC frame returned and no synthetic
-          # auth-fail/timeout frame was emitted. The outer `timeout` will kill
-          # the proxy cleanly; we don't pipefail on its exit code.
+          # auth-fail/timeout frame was emitted. The outer `timeout` kills the
+          # proxy cleanly; we don't pipefail on its exit code.
           printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"apier-mcp-ci-smoke","version":"1.0.0"}}}' \
             | timeout 45 node dist/cli.js --endpoint=https://www.apier.no/api/mcp \
             > /tmp/smoke.out 2> /tmp/smoke.err || true
