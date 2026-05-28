@@ -2,7 +2,7 @@
 
 Hardened thin npm proxy that connects local MCP clients (Claude Desktop, Cursor, Zed, Codex) to **[Apier](https://www.apier.no)'s hosted Norwegian compliance MCP server** at `https://www.apier.no/api/mcp`.
 
-**Replaces `@apier-no/mcp`.** Old package is deprecated on npm with a pointer here.
+**Replaces `@apier/mcp`.** Old package is deprecated on npm with a pointer here.
 
 ## What this is
 
