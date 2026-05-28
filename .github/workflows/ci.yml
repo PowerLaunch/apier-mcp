@@ -154,21 +154,44 @@ jobs:
           # referencing secrets.* twice.
           APIER_API_KEY: ${{ env.APIER_API_KEY_CI }}
         run: |
-          set -eu
-          # Send one JSON-RPC initialize on stdin, capture up to 45s of stdout,
-          # then validate that a real JSON-RPC frame returned and no synthetic
-          # auth-fail/timeout frame was emitted. The outer `timeout` kills the
-          # proxy cleanly; we don't pipefail on its exit code.
-          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"apier-mcp-ci-smoke","version":"1.0.0"}}}' \
-            | timeout 45 node dist/cli.js --endpoint=https://www.apier.no/api/mcp \
+          set -euo pipefail
+          # mcp-remote treats stdin EOF as "client disconnected" and shuts down
+          # immediately. If we close stdin the instant printf finishes, the
+          # upstream initialize response never lands on stdout — that's exactly
+          # what failed run 26563021894 (proxy connected, forwarded the
+          # request, then shut down before the response could flow back).
+          #
+          # Fix: hold stdin open in a brace-group that polls /tmp/smoke.out for
+          # a JSON-RPC frame; break as soon as one appears. node's stdout is
+          # redirected to /tmp/smoke.out via the `>` on the RIGHT side of the
+          # pipe, so the loop reads a file the node process writes — the pipe
+          # carries stdin INTO node and the redirect carries stdout OUT to a
+          # file; the two flows don't share a buffer, so no deadlock. Outer
+          # `timeout 45` is the hard ceiling; inner poll caps at 30 × 1 s.
+          REQ='{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"apier-mcp-ci-smoke","version":"1.0.0"}}}'
+          # Pre-clear so we don't read frames from a previous job's leftover.
+          : > /tmp/smoke.out
+          : > /tmp/smoke.err
+          {
+            printf '%s\n' "$REQ"
+            for i in $(seq 1 30); do
+              if [ -s /tmp/smoke.out ] && grep -q '"jsonrpc":"2.0"' /tmp/smoke.out; then
+                break
+              fi
+              sleep 1
+            done
+          } | timeout 45 node dist/cli.js --endpoint=https://www.apier.no/api/mcp \
             > /tmp/smoke.out 2> /tmp/smoke.err || true
           echo "--- captured stdout ---"; cat /tmp/smoke.out
           echo "--- captured stderr (redacted by proxy) ---"; cat /tmp/smoke.err
-          grep -qE '"jsonrpc":"2\.0"' /tmp/smoke.out || { echo "FAIL: no JSON-RPC frames in stdout"; exit 1; }
-          if grep -qE '"code":-32001.*"Authentication failed' /tmp/smoke.out; then
-            echo "FAIL: auth-fail frame — APIER_API_KEY_CI rejected by upstream"; exit 1
+          # Loud-fail assertions. PASS only on a proper initialize result;
+          # FAIL loudly on any -32001 frame (auth OR timeout) and on empty
+          # output.
+          [ -s /tmp/smoke.out ] || { echo "FAIL: /tmp/smoke.out is empty — no upstream frames arrived"; exit 1; }
+          if grep -qE '"code":-32001' /tmp/smoke.out; then
+            echo "FAIL: -32001 error frame on stdout (auth or timeout) — see captured output above"; exit 1
           fi
-          if grep -qE '"code":-32001.*"Request timed out' /tmp/smoke.out; then
-            echo "FAIL: timeout frame — proxy idle watchdog fired"; exit 1
-          fi
-          echo "OK — live MCP handshake succeeded"
+          grep -qE '"jsonrpc":"2\.0"' /tmp/smoke.out || { echo "FAIL: no JSON-RPC frame in stdout"; exit 1; }
+          grep -qE '"id":\s*1\b' /tmp/smoke.out || { echo "FAIL: no response for the initialize id=1"; exit 1; }
+          grep -qE '"result"\s*:' /tmp/smoke.out || { echo "FAIL: no result field on the initialize response"; exit 1; }
+          echo "OK — live MCP handshake succeeded (initialize result received from upstream)"
