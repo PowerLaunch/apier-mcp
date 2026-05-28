@@ -109,3 +109,51 @@ jobs:
             exit 1
           fi
           echo "OK — tarball clean"
+
+  # Gated live-auth smoke job (PR-083b). Exercises the built CLI against the
+  # real www.apier.no MCP endpoint using a CI-only API key. The `if:` gate
+  # skips this job cleanly on forks and on PRs from contributors without
+  # access to APIER_API_KEY_CI — it is NOT a required check. The secret is
+  # never `echo`'d; GitHub Actions auto-masks it in logs, and it is forwarded
+  # to the CLI only via the APIER_API_KEY env var (which the CLI in turn
+  # passes onward via --header argv after scrubbing it from the child env).
+  live-auth:
+    runs-on: ubuntu-latest
+    needs: build
+    if: ${{ github.repository == 'PowerLaunch/apier-mcp' && secrets.APIER_API_KEY_CI != '' }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install
+        run: npm ci --no-audit --no-fund
+      - name: Build
+        run: npm run build
+      - name: Live MCP smoke test against www.apier.no
+        shell: bash
+        env:
+          APIER_API_KEY: ${{ secrets.APIER_API_KEY_CI }}
+        run: |
+          set -eu
+          # Send one JSON-RPC initialize on stdin, capture up to 45s of stdout,
+          # then validate that a real JSON-RPC frame returned and no synthetic
+          # auth-fail/timeout frame was emitted. The outer `timeout` will kill
+          # the proxy cleanly; we don't pipefail on its exit code.
+          printf '%s\n' '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"apier-mcp-ci-smoke","version":"1.0.0"}}}' \
+            | timeout 45 node dist/cli.js --endpoint=https://www.apier.no/api/mcp \
+            > /tmp/smoke.out 2> /tmp/smoke.err || true
+          echo "--- captured stdout ---"; cat /tmp/smoke.out
+          echo "--- captured stderr (redacted by proxy) ---"; cat /tmp/smoke.err
+          grep -qE '"jsonrpc":"2\.0"' /tmp/smoke.out || { echo "FAIL: no JSON-RPC frames in stdout"; exit 1; }
+          if grep -qE '"code":-32001.*"Authentication failed' /tmp/smoke.out; then
+            echo "FAIL: auth-fail frame — APIER_API_KEY_CI rejected by upstream"; exit 1
+          fi
+          if grep -qE '"code":-32001.*"Request timed out' /tmp/smoke.out; then
+            echo "FAIL: timeout frame — proxy idle watchdog fired"; exit 1
+          fi
+          echo "OK — live MCP handshake succeeded"

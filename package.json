@@ -1,6 +1,6 @@
 {
   "name": "@apier-no/mcp",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Hardened thin proxy: connect local MCP clients (Claude Desktop, Cursor, Zed, Codex) to Apier's hosted Norwegian compliance MCP server at https://www.apier.no/api/mcp. Reads APIER_API_KEY from the environment and scrubs it from the spawned child process before forwarding via --header Authorization: Bearer.",
   "type": "module",
   "bin": {
