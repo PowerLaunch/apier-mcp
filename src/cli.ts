@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * @apier/mcp — Hardened thin proxy from local MCP clients (Claude Desktop,
+ * @apier-no/mcp — Hardened thin proxy from local MCP clients (Claude Desktop,
  * Cursor, Zed, Codex) to Apier's hosted Norwegian compliance MCP server.
  *
  * Security posture: see SECURITY.md. Summary —
@@ -101,7 +101,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
       out.endpoint = v;
     } else if (a === "--allow-http") {
       throw new Error(
-        "--allow-http is not supported by @apier/mcp. The Apier endpoint is " +
+        "--allow-http is not supported by @apier-no/mcp. The Apier endpoint is " +
           "https-only. If you have a legitimate non-https use case (local " +
           "dev mirror), use mcp-remote directly."
       );
@@ -120,7 +120,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   return out;
 }
 
-const HELP = `@apier/mcp ${VERSION} — Hardened proxy to Apier's hosted MCP server.
+const HELP = `@apier-no/mcp ${VERSION} — Hardened proxy to Apier's hosted MCP server.
 
 Usage: apier-mcp [options]
 
@@ -141,7 +141,7 @@ Example MCP client config (Claude Desktop / Cursor):
     "mcpServers": {
       "apier": {
         "command": "npx",
-        "args": ["-y", "@apier/mcp"],
+        "args": ["-y", "@apier-no/mcp"],
         "env": { "APIER_API_KEY": "apier_live_<your_key_here>" }
       }
     }
@@ -185,7 +185,7 @@ function validateEndpoint(raw: string): URL {
   if (u.protocol !== "https:") {
     throw new Error(
       `Refusing non-https endpoint: ${u.protocol}//${u.host}. ` +
-        `@apier/mcp requires https. To use a non-https mirror, call mcp-remote directly.`
+        `@apier-no/mcp requires https. To use a non-https mirror, call mcp-remote directly.`
     );
   }
   return u;
@@ -301,7 +301,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
 
 // Registered ONLY when run as the CLI entry point (see isMainModule below),
 // never as an import side effect — these call process.exit(70), which would
-// otherwise terminate any app that imports @apier/mcp on an unrelated
+// otherwise terminate any app that imports @apier-no/mcp on an unrelated
 // unhandled error (Cursor Bugbot, Medium).
 function installGlobalErrorHandlers(): void {
   process.on("uncaughtException", (err) => {

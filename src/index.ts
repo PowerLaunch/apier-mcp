@@ -1,4 +1,4 @@
 /**
- * @apier/mcp — programmatic surface.
+ * @apier-no/mcp — programmatic surface.
  */
 export { main, buildChildEnv } from "./cli.js";

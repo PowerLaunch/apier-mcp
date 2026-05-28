@@ -1,5 +1,5 @@
 {
-  "name": "@apier/mcp",
+  "name": "@apier-no/mcp",
   "version": "1.0.0",
   "description": "Hardened thin proxy: connect local MCP clients (Claude Desktop, Cursor, Zed, Codex) to Apier's hosted Norwegian compliance MCP server at https://www.apier.no/api/mcp. Reads APIER_API_KEY from the environment and scrubs it from the spawned child process before forwarding via --header Authorization: Bearer.",
   "type": "module",
@@ -36,8 +36,15 @@
     "url": "https://github.com/PowerLaunch/apier-mcp/issues"
   },
   "keywords": [
-    "mcp", "model-context-protocol", "apier", "norway",
-    "norwegian-compliance", "altinn", "skatteetaten", "claude", "cursor"
+    "mcp",
+    "model-context-protocol",
+    "apier",
+    "norway",
+    "norwegian-compliance",
+    "altinn",
+    "skatteetaten",
+    "claude",
+    "cursor"
   ],
   "author": "Grov Digital (org.nr. 833 397 982)",
   "license": "MIT",

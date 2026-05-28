@@ -1,4 +1,4 @@
-# @apier/mcp
+# @apier-no/mcp
 
 Hardened thin npm proxy that connects local MCP clients (Claude Desktop, Cursor, Zed, Codex) to **[Apier](https://www.apier.no)'s hosted Norwegian compliance MCP server** at `https://www.apier.no/api/mcp`.
 
@@ -17,10 +17,10 @@ A small wrapper around [`mcp-remote`](https://github.com/geelen/mcp-remote) that
 All tool semantics live server-side at https://www.apier.no/api/mcp.
 
 ## Install
-npm install -g @apier/mcp
+npm install -g @apier-no/mcp
 
 or invoke ephemerally via `npx`:
-npx -y @apier/mcp
+npx -y @apier-no/mcp
 
 ## Get an API key
 
@@ -33,7 +33,7 @@ https://www.apier.no/dashboard/keys
   "mcpServers": {
     "apier": {
       "command": "npx",
-      "args": ["-y", "@apier/mcp"],
+      "args": ["-y", "@apier-no/mcp"],
       "env": { "APIER_API_KEY": "apier_live_<your_key_here>" }
     }
   }
