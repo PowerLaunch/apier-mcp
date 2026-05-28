@@ -14,9 +14,11 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-# Actions are tracked at @v4 (major tag) per PowerLaunch org convention,
-# matching the monorepo (PowerLaunch/apier). SHA-pinning was considered
-# (CodeRabbit) and deferred for org-wide consistency (PR #10).
+# Actions are tracked at floating major tags (@v6) per PowerLaunch org
+# convention, matching the monorepo (PowerLaunch/apier). SHA-pinning was
+# considered (CodeRabbit) and deferred for org-wide consistency (PR #10).
+# Bumped v4 -> v6 (Node 24 runtime) — GitHub forces Node 24 default
+# 2026-06-16 and removes Node 20 from runners 2026-09-16.
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -24,10 +26,10 @@ jobs:
       matrix:
         node-version: ['20', '22']
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
@@ -60,10 +62,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '20'
           cache: npm
@@ -130,10 +132,10 @@ jobs:
       # step's `if:` is evaluated, so the gating env MUST live at job level.
       APIER_API_KEY_CI: ${{ secrets.APIER_API_KEY_CI }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
           cache: npm

@@ -14,9 +14,11 @@ permissions:
   contents: read
   id-token: write
 
-# Actions are tracked at @v4 (major tag) per PowerLaunch org convention,
-# matching the monorepo (PowerLaunch/apier). SHA-pinning was considered
-# (CodeRabbit) and deferred for org-wide consistency (PR #10).
+# Actions are tracked at floating major tags (@v6) per PowerLaunch org
+# convention, matching the monorepo (PowerLaunch/apier). SHA-pinning was
+# considered (CodeRabbit) and deferred for org-wide consistency (PR #10).
+# Bumped v4 -> v6 (Node 24 runtime) — GitHub forces Node 24 default
+# 2026-06-16 and removes Node 20 from runners 2026-09-16.
 jobs:
   publish:
     runs-on: ubuntu-latest
@@ -24,10 +26,10 @@ jobs:
     # even with OIDC. Restores the pre-rebrand guard (Cursor Bugbot, Low).
     if: github.repository == 'PowerLaunch/apier-mcp'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
           registry-url: 'https://registry.npmjs.org'

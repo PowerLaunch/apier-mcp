@@ -10,8 +10,10 @@ on:
   schedule:
     - cron: "0 6 * * 1"
 
-# Actions tracked at @v4 / @v2 (major tags) per PowerLaunch org convention,
-# matching the monorepo. SHA-pinning deferred for org-wide consistency (PR #10).
+# Actions tracked at floating major tags (@v6 / @v2) per PowerLaunch org
+# convention, matching the monorepo. SHA-pinning deferred for org-wide
+# consistency (PR #10). checkout bumped v4 -> v6 (Node 24 runtime);
+# gitleaks-action@v2 is third-party and tracked separately.
 jobs:
   gitleaks:
     name: Gitleaks
@@ -22,7 +24,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
