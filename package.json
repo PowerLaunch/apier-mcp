@@ -52,7 +52,7 @@
     "mcp-remote": "0.1.38"
   },
   "devDependencies": {
-    "@types/node": "^20.14.0",
+    "@types/node": "^26.1.0",
     "typescript": "^5.5.0",
     "vitest": "^2.0.0"
   }
