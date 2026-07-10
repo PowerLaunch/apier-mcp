@@ -10,30 +10,25 @@ concurrency:
   group: ${{ github.workflow }}
   cancel-in-progress: false
 
+# Least privilege by default: NO id-token at the workflow level. Only the
+# `publish` job opts into id-token: write at the job level (PR-11).
 permissions:
   contents: read
-  id-token: write
 
-# Actions are tracked at @v4 (major tag) per PowerLaunch org convention,
-# matching the monorepo (PowerLaunch/apier). SHA-pinning was considered
-# (CodeRabbit) and deferred for org-wide consistency (PR #10).
 jobs:
-  publish:
+  build-audit:
     runs-on: ubuntu-latest
-    # Defense in depth: never let a fork's tag push trigger a real publish,
-    # even with OIDC. Restores the pre-rebrand guard (Cursor Bugbot, Low).
     if: github.repository == 'PowerLaunch/apier-mcp'
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'
-          cache: npm
-      - name: Upgrade npm for OIDC Trusted Publishing (requires npm >= 11.5.1)
-        run: npm install -g npm@latest
+          package-manager-cache: false
       - name: Install
         run: npm ci --no-audit --no-fund
       - name: Verify tag matches package.json version
@@ -55,8 +50,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/pack /tmp/unpack
-          npm pack --pack-destination /tmp/pack
-          tar -xzf /tmp/pack/*.tgz -C /tmp/unpack
+          TARBALL="$(npm pack --pack-destination /tmp/pack)"
+          tar -xzf "/tmp/pack/$TARBALL" -C /tmp/unpack
           BAD=$(find /tmp/unpack/package -type f \
                 | sed 's|/tmp/unpack/package/||' \
                 | grep -vE '^(dist/.*|README\.md|SECURITY\.md|LICENSE|package\.json)$' || true)
@@ -71,8 +66,37 @@ jobs:
             echo "ERROR: secret-shaped string in tarball"
             exit 1
           fi
+      - name: Upload audited tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: mcp-tarball
+          path: /tmp/pack/*.tgz
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    needs: build-audit
+    runs-on: ubuntu-latest
+    if: github.repository == 'PowerLaunch/apier-mcp'
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          package-manager-cache: false
+      - name: Upgrade npm for OIDC Trusted Publishing (requires npm >= 11.5.1)
+        run: npm install -g npm@11
+      - name: Configure npm registry for OIDC
+        # Do NOT use setup-node's registry-url input: it writes
+        # //registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN} into .npmrc, and with no
+        # NODE_AUTH_TOKEN that empty token forces npm down the classic-token path and blocks
+        # OIDC Trusted Publishing. Point npm at the registry without writing an authToken line.
+        run: npm config set registry https://registry.npmjs.org/
+      - name: Download audited tarball
+        uses: actions/download-artifact@v4
+        with:
+          name: mcp-tarball
       - name: Publish
-        # --ignore-scripts so prepublishOnly does NOT rebuild dist/ after the
-        # Pack + audit step packed & scanned it — keeps the published artifact
-        # byte-identical to the audited one (Cursor Bugbot, Medium).
-        run: npm publish --provenance --access public --ignore-scripts
+        run: npm publish "./$(ls *.tgz)" --provenance --access public --ignore-scripts
