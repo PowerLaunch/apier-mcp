@@ -1,7 +1,7 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "no.apier/mcp",
-  "description": "Norwegian company data and compliance for AI agents: Brønnøysund company profiles, Altinn 3 compliance, signing authority, annual accounts, filing deadlines and fullmakt delegation.",
+  "description": "Norwegian company data and compliance for AI agents: Brønnøysund, Altinn 3, fullmakt.",
   "repository": {
     "url": "https://github.com/PowerLaunch/apier-mcp",
     "source": "github"
@@ -30,7 +30,23 @@
   "remotes": [
     {
       "type": "streamable-http",
-      "url": "https://www.apier.no/api/mcp"
+      "url": "https://www.apier.no/api/mcp",
+      "headers": [
+        {
+          "name": "Authorization",
+          "description": "Bearer token built from your Apier API key (apier_live_… or apier_test_…) from https://www.apier.no/dashboard/keys. Required for protected tool calls; discovery is keyless.",
+          "isRequired": true,
+          "isSecret": true,
+          "value": "Bearer {apier_api_key}",
+          "variables": {
+            "apier_api_key": {
+              "description": "Apier API key (apier_live_… or apier_test_…) from https://www.apier.no/dashboard/keys.",
+              "isRequired": true,
+              "isSecret": true
+            }
+          }
+        }
+      ]
     }
   ]
 }
