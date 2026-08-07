@@ -4,6 +4,23 @@ All notable changes to `@apier-no/mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-07
+
+### Security
+- **`APIER_API_KEY` no longer appears in the spawned child's command line** ([#33](https://github.com/PowerLaunch/apier-mcp/issues/33)). The `--header` argv element previously interpolated the live key as `Authorization: Bearer <key>`, which any local user could read from `/proc/<pid>/cmdline` (world-readable on Linux) or `ps aux`. It now carries only the literal placeholder `Authorization:${APIER_MCP_AUTH_HEADER}`, and the bearer value is handed to `mcp-remote` in the `APIER_MCP_AUTH_HEADER` environment variable, which it expands into the request header. Process environments are readable only by the owner and root, so the key is no longer exposed to other local users.
+- `mcp-remote` logs its custom headers *before* expanding the placeholder, so its `Using custom headers: …` diagnostic now prints `${APIER_MCP_AUTH_HEADER}` instead of the live key.
+- The key no longer feeds `mcp-remote`'s `getServerUrlHash()`, so it is not part of the md5 that names files under `~/.mcp-auth`.
+
+### Changed
+- The API key is trimmed before becoming a header value, so a trailing newline (e.g. from `export APIER_API_KEY=$(cat key.txt)`) no longer produces an opaque invalid-header failure.
+- `~/.mcp-auth` session directories for a given endpoint are now shared across different API keys rather than one per key, because the URL hash sees the placeholder rather than the key. No practical effect: this proxy authenticates with a static bearer token and does not use `mcp-remote`'s OAuth token store.
+
+### Added
+- Tests pinning that no element of the spawn argv contains the key, that the bearer value reaches the child via `APIER_MCP_AUTH_HEADER`, that a caller-supplied `APIER_MCP_AUTH_HEADER` cannot be spoofed through the parent env, and contract tests for `mcp-remote`'s `--header` parse regex and `${VAR}` substitution.
+
+### Compatibility
+- No change to the public configuration surface. Existing `npx -y @apier-no/mcp` client configs keep working unchanged.
+
 ## [0.1.1] - 2026-05-14
 
 ### Added

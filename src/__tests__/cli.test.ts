@@ -1,6 +1,136 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, afterEach } from "vitest";
 import { existsSync } from "node:fs";
-import { main, parseArgs, buildChildEnv, createStderrRedactor, resolveMcpRemoteEntry, signalExitCode } from "../cli.js";
+import { EventEmitter } from "node:events";
+import { Readable } from "node:stream";
+
+// Mock spawn so the argv/env assertions below can inspect exactly what main()
+// would hand to mcp-remote without starting a real process. Declared via
+// vi.hoisted so spawnMock exists before vitest hoists the cli.js import.
+const { spawnMock } = vi.hoisted(() => ({ spawnMock: vi.fn() }));
+vi.mock("node:child_process", () => ({ spawn: spawnMock }));
+
+import {
+  main,
+  parseArgs,
+  buildChildEnv,
+  createStderrRedactor,
+  resolveMcpRemoteEntry,
+  signalExitCode,
+  AUTH_HEADER_ENV_VAR,
+  AUTH_HEADER_ARG,
+} from "../cli.js";
+
+// ─── Issue #33: the key must never reach the child's command line ──────────
+
+/**
+ * Drive main() to completion against a fake child and return what spawn() was
+ * called with. main() resolves on the child's "close" event, so we emit one.
+ */
+async function captureSpawn(
+  argv: string[],
+  env: NodeJS.ProcessEnv,
+): Promise<{ args: string[]; env: NodeJS.ProcessEnv; exitCode: number }> {
+  let child: EventEmitter & { stdout: Readable; stderr: Readable; killed: boolean; kill(): boolean };
+  spawnMock.mockReset();
+  spawnMock.mockImplementation(() => {
+    const c = Object.assign(new EventEmitter(), {
+      stdout: new Readable({ read() {} }),
+      stderr: new Readable({ read() {} }),
+      killed: false,
+      kill: () => true,
+    });
+    child = c;
+    return c;
+  });
+  const stdoutSpy = vi.spyOn(process.stdout, "write").mockImplementation((() => true) as never);
+  const stderrSpy = vi.spyOn(process.stderr, "write").mockImplementation((() => true) as never);
+  try {
+    const p = main(argv, env);
+    await new Promise((r) => setTimeout(r, 0));
+    child!.stdout.push(null);
+    child!.stderr.push(null);
+    child!.emit("close", 0, null);
+    const exitCode = await p;
+    const call = spawnMock.mock.calls[0] as [string, string[], { env: NodeJS.ProcessEnv }];
+    return { args: call[1], env: call[2].env, exitCode };
+  } finally {
+    stdoutSpy.mockRestore();
+    stderrSpy.mockRestore();
+  }
+}
+
+const KEY = "apier_live_supersecret_abcdef0123456789";
+
+describe("spawn argv — API key must not be observable via process inspection (#33)", () => {
+  afterEach(() => { vi.restoreAllMocks(); });
+
+  it("no element of the spawn argv contains the API key value", async () => {
+    const { args } = await captureSpawn([], { APIER_API_KEY: KEY } as NodeJS.ProcessEnv);
+    for (const a of args) expect(a).not.toContain(KEY);
+    // Belt and braces: the joined command line — what `ps aux` actually shows.
+    expect(args.join(" ")).not.toContain(KEY);
+  });
+
+  it("argv carries the literal ${APIER_MCP_AUTH_HEADER} placeholder, never 'Bearer <key>'", async () => {
+    const { args } = await captureSpawn([], { APIER_API_KEY: KEY } as NodeJS.ProcessEnv);
+    expect(args).toContain("--header");
+    expect(args).toContain("Authorization:${APIER_MCP_AUTH_HEADER}");
+    expect(args.join(" ")).not.toMatch(/Bearer\s/);
+  });
+
+  it("hands the bearer value to the child via APIER_MCP_AUTH_HEADER instead", async () => {
+    const { env } = await captureSpawn([], { APIER_API_KEY: KEY } as NodeJS.ProcessEnv);
+    expect(env[AUTH_HEADER_ENV_VAR]).toBe(`Bearer ${KEY}`);
+  });
+
+  it("still scrubs APIER_API_KEY itself from the spawned child's env", async () => {
+    const { env } = await captureSpawn([], {
+      APIER_API_KEY: KEY,
+      PATH: "/usr/bin",
+    } as NodeJS.ProcessEnv);
+    expect(env.APIER_API_KEY).toBeUndefined();
+    expect(env.AUTHORIZATION).toBeUndefined();
+    expect(env.PATH).toBe("/usr/bin");
+  });
+
+  it("a caller-supplied APIER_MCP_AUTH_HEADER cannot survive into the child", async () => {
+    // The name matches ENV_DENY_SUBSTRINGS ("APIER"), so buildChildEnv drops the
+    // spoofed value; main() then assigns the real one.
+    const { env } = await captureSpawn([], {
+      APIER_API_KEY: KEY,
+      APIER_MCP_AUTH_HEADER: "Bearer attacker_controlled_value",
+    } as NodeJS.ProcessEnv);
+    expect(env[AUTH_HEADER_ENV_VAR]).toBe(`Bearer ${KEY}`);
+    expect(env[AUTH_HEADER_ENV_VAR]).not.toContain("attacker_controlled_value");
+  });
+
+  it("trims surrounding whitespace from the key before it becomes a header value", async () => {
+    const { env } = await captureSpawn([], {
+      APIER_API_KEY: `  ${KEY}\n`,
+    } as NodeJS.ProcessEnv);
+    expect(env[AUTH_HEADER_ENV_VAR]).toBe(`Bearer ${KEY}`);
+  });
+});
+
+describe("AUTH_HEADER_ARG — contract with mcp-remote's parser", () => {
+  // Pins the two upstream behaviours this fix depends on, both read out of the
+  // pinned mcp-remote 0.1.38 bundle. If a future bump changes either, this
+  // fails loudly rather than silently sending an unauthenticated request.
+  it("satisfies mcp-remote's --header parse regex, yielding the placeholder as the value", () => {
+    const match = AUTH_HEADER_ARG.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
+    expect(match).not.toBeNull();
+    expect(match![1]).toBe("Authorization");
+    expect(match![2]).toBe(`\${${AUTH_HEADER_ENV_VAR}}`);
+  });
+
+  it("matches mcp-remote's ${VAR} substitution pattern and resolves from env", () => {
+    const substituted = AUTH_HEADER_ARG.replace(
+      /\$\{([^}]+)}/g,
+      (_m, name: string) => ({ [AUTH_HEADER_ENV_VAR]: "Bearer resolved" })[name] ?? "",
+    );
+    expect(substituted).toBe("Authorization:Bearer resolved");
+  });
+});
 
 describe("buildChildEnv — env scrubbing", () => {
   it("strips APIER_API_KEY from the child environment", () => {
