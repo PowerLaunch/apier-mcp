@@ -378,9 +378,10 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
   delete childEnv.AUTHORIZATION;
   // Assign AFTER buildChildEnv so the deny-list pass above has already dropped
   // any caller-supplied value of this name. Trimmed because the value now
-  // becomes an HTTP header value directly: stray surrounding whitespace (a
-  // trailing newline from `export APIER_API_KEY=$(cat key.txt)`) would make
-  // undici reject the header with an opaque error.
+  // becomes an HTTP header value directly: stray surrounding whitespace — a
+  // trailing space pasted into claude_desktop_config.json, or a newline from a
+  // .env loader that does not strip one — would make undici reject the header
+  // with an opaque error.
   childEnv[AUTH_HEADER_ENV_VAR] = `Bearer ${apiKey.trim()}`;
 
   // Run mcp-remote's resolved bin with the current Node binary instead of npx.

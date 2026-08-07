@@ -12,7 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The key no longer feeds `mcp-remote`'s `getServerUrlHash()`, so it is not part of the md5 that names files under `~/.mcp-auth`.
 
 ### Changed
-- The API key is trimmed before becoming a header value, so a trailing newline (e.g. from `export APIER_API_KEY=$(cat key.txt)`) no longer produces an opaque invalid-header failure.
+- The API key is trimmed before becoming a header value, so stray surrounding whitespace — a trailing space pasted into `claude_desktop_config.json`, or a newline from a `.env` loader that does not strip one — no longer produces an opaque invalid-header failure.
 - `~/.mcp-auth` session directories for a given endpoint are now shared across different API keys rather than one per key, because the URL hash sees the placeholder rather than the key. No practical effect: this proxy authenticates with a static bearer token and does not use `mcp-remote`'s OAuth token store.
 
 ### Added
