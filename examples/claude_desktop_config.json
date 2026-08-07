@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "apier": {
+      "command": "npx",
+      "args": ["-y", "@apier-no/mcp"],
+      "env": { "APIER_API_KEY": "apier_live_<your_key_here>" }
+    }
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "@apier-no/mcp",
-  "version": "1.1.0",
-  "description": "Hardened thin proxy: connect local MCP clients (Claude Desktop, Cursor, Zed, Codex) to Apier's hosted Norwegian compliance MCP server at https://www.apier.no/api/mcp. Reads APIER_API_KEY from the environment and scrubs it from the spawned child process before forwarding via --header Authorization: Bearer.",
+  "version": "1.1.1",
+  "description": "Apier MCP Server — Norwegian company data and compliance for AI agents. Hardened thin proxy connecting local MCP clients (Claude Desktop, Cursor, VS Code, Zed) to Apier's hosted MCP server at https://www.apier.no/api/mcp: Brønnøysund company data, Altinn 3 compliance, signing authority, filing deadlines and fullmakt.",
   "type": "module",
   "bin": {
     "apier-mcp": "dist/cli.js"
@@ -27,24 +27,24 @@
     "access": "public",
     "provenance": true
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/PowerLaunch/apier-mcp.git"
-  },
-  "homepage": "https://www.apier.no",
+  "repository": "github:PowerLaunch/apier-mcp",
+  "homepage": "https://apier.no",
   "bugs": {
     "url": "https://github.com/PowerLaunch/apier-mcp/issues"
   },
   "keywords": [
     "mcp",
+    "mcp-server",
     "model-context-protocol",
-    "apier",
     "norway",
-    "norwegian-compliance",
+    "norwegian",
+    "brreg",
+    "bronnoysund",
     "altinn",
-    "skatteetaten",
-    "claude",
-    "cursor"
+    "compliance",
+    "company-data",
+    "kyc",
+    "regtech"
   ],
   "author": "Grov Digital (org.nr. 833 397 982)",
   "license": "MIT",
