@@ -300,6 +300,30 @@ describe("main --help", () => {
     const out = chunks.join("");
     expect(out).toContain("Authorization: Bearer");
     expect(out).not.toContain("***REDACTED***");
+    // Pin the exact key-provisioning URL. https://www.apier.no/dashboard/keys
+    // returned 404; the help text must keep pointing at the docs page.
+    expect(out).toContain("https://www.apier.no/docs/authentication");
+    expect(out).not.toContain("https://www.apier.no/dashboard/keys");
+  });
+});
+
+describe("main — missing APIER_API_KEY error text", () => {
+  it("points at the exact authentication docs URL, not the 404 dashboard path", async () => {
+    const chunks: string[] = [];
+    const original = process.stderr.write;
+    process.stderr.write = ((chunk: string | Uint8Array): boolean => {
+      chunks.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
+      return true;
+    }) as typeof process.stderr.write;
+    try {
+      expect(await main([], {} as NodeJS.ProcessEnv)).toBe(1);
+    } finally {
+      process.stderr.write = original;
+    }
+    const out = chunks.join("");
+    expect(out).toContain("APIER_API_KEY environment variable is required.");
+    expect(out).toContain("https://www.apier.no/docs/authentication");
+    expect(out).not.toContain("https://www.apier.no/dashboard/keys");
   });
 });
 

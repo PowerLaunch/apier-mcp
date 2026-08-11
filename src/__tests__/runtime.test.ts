@@ -179,10 +179,15 @@ describe("main() runtime — PR-083b acceptance matrix", () => {
   });
 
   it("T2a missing APIER_API_KEY → exit 1, no spawn", async () => {
-    captureStdio();
+    const cap = captureStdio();
     const code = await main([], {} as NodeJS.ProcessEnv);
     expect(code).toBe(1);
     expect(spawnMock).not.toHaveBeenCalled();
+    // Pin the exact key-provisioning URL alongside the exit-code assertion, so
+    // a regression to the 404 dashboard path fails loudly here too.
+    const stderr = cap.stderr.join("");
+    expect(stderr).toContain("https://www.apier.no/docs/authentication");
+    expect(stderr).not.toContain("https://www.apier.no/dashboard/keys");
   });
 
   it("T6 --timeout without a value → exit 2, no spawn", async () => {

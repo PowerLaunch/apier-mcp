@@ -4,7 +4,7 @@ All notable changes to `@apier-no/mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [1.2.0] - 2026-08-07
+## [1.2.0] - 2026-08-11
 
 ### Security
 - **`APIER_API_KEY` no longer appears in the spawned child's command line** ([#33](https://github.com/PowerLaunch/apier-mcp/issues/33)). The `--header` argv element previously interpolated the live key as `Authorization: Bearer <key>`, which any local user could read from `/proc/<pid>/cmdline` (world-readable on Linux) or `ps aux`. It now carries only the literal placeholder `Authorization:${APIER_MCP_AUTH_HEADER}`, and the bearer value is handed to `mcp-remote` in the `APIER_MCP_AUTH_HEADER` environment variable, which it expands into the request header. Process environments are readable only by the owner and root, so the key is no longer exposed to other local users.
@@ -20,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Compatibility
 - No change to the public configuration surface. Existing `npx -y @apier-no/mcp` client configs keep working unchanged.
+
+### Fixed
+- Key-provisioning link corrected everywhere it appears (README, CLI help and error text, registry draft): `https://www.apier.no/dashboard/keys` returned HTTP 404; links now point at `https://www.apier.no/docs/authentication` (with the dashboard at `https://www.apier.no/dashboard` as the follow-up step in the README). Closes audit finding AUDIT-MCP-RAINYDAY-01 P2.
 
 ## [0.1.1] - 2026-05-14
 
