@@ -61,7 +61,7 @@ Discovery is **keyless**: `initialize`, `tools/list`, resources and prompts all 
 
 ### npx stdio proxy (`@apier-no/mcp`)
 
-For stdio-only clients, this package wraps [`mcp-remote`](https://github.com/geelen/mcp-remote), reads `APIER_API_KEY` from your environment, removes it from the spawned child's environment, redacts it from stderr, and forwards it as an `Authorization: Bearer` header argument on the child's command line (visible to local process inspection on multi-user systems — see [SECURITY.md](./SECURITY.md)).
+For stdio-only clients, this package wraps [`mcp-remote`](https://github.com/geelen/mcp-remote), reads `APIER_API_KEY` from your environment, removes it from the spawned child's environment, redacts it from stderr, and hands the bearer value over out-of-band so it never appears on the child's command line — see [SECURITY.md](./SECURITY.md).
 
 **Published as `@apier-no/mcp`.** The `@apier` scope was unavailable, so this package ships under the `@apier-no` scope.
 
@@ -121,7 +121,8 @@ Ready-to-paste config files for each client live in [`examples/`](./examples).
 
 ## Security
 
-- `APIER_API_KEY` is read by the parent process and **scrubbed from the spawned child's environment**, and stderr is passed through a redactor that strips `Bearer …`, `apier_(live|test)_…`, `ghp_…`, and `Authorization:` substrings. The key is still forwarded to the child as an `Authorization: Bearer` `--header` argument, which local process inspection (`ps aux`, `/proc/<pid>/cmdline`) can reveal on multi-user systems — see [SECURITY.md](./SECURITY.md).
+- `APIER_API_KEY` is read by the parent process and **scrubbed from the spawned child's environment**, and stderr is passed through a redactor that strips `Bearer …`, `apier_(live|test)_…`, `ghp_…`, and `Authorization:` substrings.
+- **The key never appears in the child's command line.** The `--header` argument carries only the placeholder `Authorization:${APIER_MCP_AUTH_HEADER}`; the bearer value is passed out-of-band in that variable and expanded by `mcp-remote` at request time. Command lines are world-readable on Linux (`/proc/<pid>/cmdline`), process environments are not — so this is no longer readable by other local users ([#33](https://github.com/PowerLaunch/apier-mcp/issues/33), fixed in 1.2.0). An attacker already running as you can still read the environment — see [SECURITY.md](./SECURITY.md).
 - Non-https endpoints are rejected before spawn; `mcp-remote` is exact-pinned and releases are published with npm provenance via GitHub Actions Trusted Publishing (OIDC).
 - Treat client config files (`claude_desktop_config.json`, `.cursor/mcp.json`, …) like `.env` files — never commit them with a real key.
 
