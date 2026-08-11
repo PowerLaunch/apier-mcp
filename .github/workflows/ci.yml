@@ -117,8 +117,10 @@ jobs:
   # unavailable in a job-level `if:` expression, so the secret-present test
   # must run at step level against env). The key is never `echo`'d — GitHub
   # auto-masks it in logs — and it is forwarded to the CLI only via the
-  # APIER_API_KEY env var (which the CLI in turn passes onward via --header
-  # argv after scrubbing it from the child env).
+  # APIER_API_KEY env var. The CLI scrubs that name from the child env and
+  # hands the bearer value onward in APIER_MCP_AUTH_HEADER, which mcp-remote
+  # expands into its Authorization header; the key never reaches the child's
+  # argv (issue #33).
   live-auth:
     runs-on: ubuntu-latest
     needs: build

@@ -5,7 +5,9 @@
  *
  * Security posture: see SECURITY.md. Summary —
  *   • API key read from APIER_API_KEY env; SCRUBBED from spawned child's env.
- *   • Key forwarded to mcp-remote only via `--header Authorization: Bearer …`.
+ *   • Key handed to mcp-remote out-of-band via the APIER_MCP_AUTH_HEADER env
+ *     var, which mcp-remote expands into the `--header` placeholder. The key
+ *     NEVER appears in the child's argv (issue #33).
  *   • stdout reserved for MCP JSON-RPC; diagnostics on stderr (redacted).
  *   • Non-https endpoint URLs rejected unconditionally.
  */
@@ -213,8 +215,8 @@ export function parseArgs(argv: string[]): ParsedArgs {
       // Reject non-flag positionals too. mcp-remote 0.1.38 parses args[0] as the
       // server URL and args[1] as the OAuth callback port; we always supply the
       // trusted endpoint as args[0], so a forwarded positional would only become
-      // a malformed port (parseInt("https://...") = NaN) — the Bearer header is
-      // never re-routed. Rejecting here keeps the guard consistent and avoids
+      // a malformed port (parseInt("https://...") = NaN) — the Authorization
+      // header is never re-routed. Rejecting here keeps the guard consistent and avoids
       // footguns if mcp-remote's positional ordering ever changes upstream.
       throw new Error(`Unknown argument: ${a}. Run apier-mcp --help for supported options.`);
     }
@@ -238,9 +240,11 @@ Options:
 Required environment variable:
   APIER_API_KEY        Get a key at https://www.apier.no/dashboard/keys
 
-The key is read from APIER_API_KEY, scrubbed from the spawned child process
-environment, and forwarded to mcp-remote via --header Authorization: Bearer.
-It is NEVER passed through env to the child.
+The key is read from APIER_API_KEY and handed to mcp-remote out-of-band via the
+APIER_MCP_AUTH_HEADER variable, which mcp-remote expands into its
+"Authorization: Bearer" request header. APIER_API_KEY itself is scrubbed from
+the child environment, and the key never appears in the child's command line —
+so local process inspection (ps aux, /proc/<pid>/cmdline) cannot reveal it.
 
 Example MCP client config (Claude Desktop / Cursor):
   {
@@ -264,6 +268,35 @@ const ENV_PASSTHROUGH_ALLOWLIST = new Set([
 ]);
 
 const ENV_DENY_SUBSTRINGS = ["TOKEN", "SECRET", "BEARER", "KEY", "PASSWORD", "CREDENTIAL", "APIER"];
+
+/**
+ * Env var carrying `Bearer <key>` to the child, replacing the old
+ * `--header "Authorization: Bearer <key>"` argv element (issue #33).
+ *
+ * mcp-remote 0.1.38 expands `${NAME}` occurrences inside every --header VALUE
+ * from its own process.env (dist/chunk-*.js, parseCommandLineArgs) — verified
+ * against the pinned version, not assumed. Two properties matter:
+ *   • The expansion runs AFTER mcp-remote logs "Using custom headers: …", so
+ *     that log line now prints the placeholder rather than the live key.
+ *   • The expansion also runs AFTER getServerUrlHash(), so the key no longer
+ *     feeds the md5 that names files under ~/.mcp-auth. That hash is now
+ *     identical across keys for a given endpoint — harmless here because we
+ *     authenticate with a static bearer token and never use mcp-remote's
+ *     OAuth token store.
+ *
+ * The name deliberately contains "APIER" so it matches ENV_DENY_SUBSTRINGS:
+ * a caller-supplied APIER_MCP_AUTH_HEADER is stripped by buildChildEnv before
+ * we assign the real value, so it cannot be spoofed through the parent env.
+ */
+export const AUTH_HEADER_ENV_VAR = "APIER_MCP_AUTH_HEADER";
+
+/**
+ * The literal --header argv element. Contains only the placeholder — no key
+ * material — so `ps aux` / `/proc/<pid>/cmdline` / Windows WMI reveal nothing.
+ * No space after the colon, matching mcp-remote's documented env-var form;
+ * its parse regex is /^([A-Za-z0-9_-]+):\s*(.*)$/. Exported for tests.
+ */
+export const AUTH_HEADER_ARG = `Authorization:\${${AUTH_HEADER_ENV_VAR}}`;
 
 export function buildChildEnv(parent: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const child: NodeJS.ProcessEnv = {};
@@ -343,6 +376,13 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
   const childEnv = buildChildEnv(env);
   delete childEnv.APIER_API_KEY;
   delete childEnv.AUTHORIZATION;
+  // Assign AFTER buildChildEnv so the deny-list pass above has already dropped
+  // any caller-supplied value of this name. Trimmed because the value now
+  // becomes an HTTP header value directly: stray surrounding whitespace — a
+  // trailing space pasted into claude_desktop_config.json, or a newline from a
+  // .env loader that does not strip one — would make undici reject the header
+  // with an opaque error.
+  childEnv[AUTH_HEADER_ENV_VAR] = `Bearer ${apiKey.trim()}`;
 
   // Run mcp-remote's resolved bin with the current Node binary instead of npx.
   // Cross-platform: spawn("npx", …, { shell:false }) fails on Windows because
@@ -359,8 +399,9 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
     return 127;
   }
 
-  const headerValue = `Authorization: Bearer ${apiKey}`;
-  const mcpRemoteArgs = [mcpRemoteEntry, endpoint.toString(), "--header", headerValue];
+  // AUTH_HEADER_ARG is a placeholder, not the key — see its definition. The
+  // child resolves it from APIER_MCP_AUTH_HEADER in childEnv above.
+  const mcpRemoteArgs = [mcpRemoteEntry, endpoint.toString(), "--header", AUTH_HEADER_ARG];
 
   const child = spawn(process.execPath, mcpRemoteArgs, {
     env: childEnv,
