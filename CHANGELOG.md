@@ -4,6 +4,11 @@ All notable changes to `@apier-no/mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-08-11
+
+### Fixed
+- Key-provisioning link corrected everywhere it appears (README, CLI help and error text, registry draft): `https://www.apier.no/dashboard/keys` returned HTTP 404; links now point at `https://www.apier.no/docs/authentication` (with the dashboard at `https://www.apier.no/dashboard` as the follow-up step in the README). Closes audit finding AUDIT-MCP-RAINYDAY-01 P2.
+
 ## [0.1.1] - 2026-05-14
 
 ### Added

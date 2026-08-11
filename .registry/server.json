@@ -6,21 +6,21 @@
     "url": "https://github.com/PowerLaunch/apier-mcp",
     "source": "github"
   },
-  "version": "1.1.1",
+  "version": "1.2.0",
   "websiteUrl": "https://apier.no",
   "packages": [
     {
       "registryType": "npm",
       "registryBaseUrl": "https://registry.npmjs.org",
       "identifier": "@apier-no/mcp",
-      "version": "1.1.1",
+      "version": "1.2.0",
       "transport": {
         "type": "stdio"
       },
       "environmentVariables": [
         {
           "name": "APIER_API_KEY",
-          "description": "Apier API key (apier_live_… or apier_test_…) from https://www.apier.no/dashboard/keys. Required for protected tool calls; discovery is keyless.",
+          "description": "Apier API key (apier_live_… or apier_test_…) from https://www.apier.no/docs/authentication. Required for protected tool calls; discovery is keyless.",
           "isRequired": true,
           "isSecret": true
         }
@@ -34,13 +34,13 @@
       "headers": [
         {
           "name": "Authorization",
-          "description": "Bearer token built from your Apier API key (apier_live_… or apier_test_…) from https://www.apier.no/dashboard/keys. Required for protected tool calls; discovery is keyless.",
+          "description": "Bearer token built from your Apier API key (apier_live_… or apier_test_…) from https://www.apier.no/docs/authentication. Required for protected tool calls; discovery is keyless.",
           "isRequired": true,
           "isSecret": true,
           "value": "Bearer {apier_api_key}",
           "variables": {
             "apier_api_key": {
-              "description": "Apier API key (apier_live_… or apier_test_…) from https://www.apier.no/dashboard/keys.",
+              "description": "Apier API key (apier_live_… or apier_test_…) from https://www.apier.no/docs/authentication.",
               "isRequired": true,
               "isSecret": true
             }

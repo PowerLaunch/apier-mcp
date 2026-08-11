@@ -236,7 +236,7 @@ Options:
   --help, -h           Print this help and exit
 
 Required environment variable:
-  APIER_API_KEY        Get a key at https://www.apier.no/dashboard/keys
+  APIER_API_KEY        Get a key at https://www.apier.no/docs/authentication
 
 The key is read from APIER_API_KEY, scrubbed from the spawned child process
 environment, and forwarded to mcp-remote via --header Authorization: Bearer.
@@ -331,7 +331,7 @@ export async function main(argv: string[], env: NodeJS.ProcessEnv): Promise<numb
   if (!apiKey || apiKey.trim().length === 0) {
     safeStderr(
       "APIER_API_KEY environment variable is required.\n" +
-        "Get a key at https://www.apier.no/dashboard/keys\n"
+        "Get a key at https://www.apier.no/docs/authentication\n"
     );
     return 1;
   }

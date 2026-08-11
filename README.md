@@ -57,7 +57,7 @@ The fastest path — no install. Point any streamable-HTTP-capable MCP client at
 https://www.apier.no/api/mcp
 ```
 
-Discovery is **keyless**: `initialize`, `tools/list`, resources and prompts all work without credentials, so an agent can explore the full catalogue before authenticating. An API key (`Authorization: Bearer apier_live_…`) is needed only for protected tool calls. Get a key at https://www.apier.no/dashboard/keys.
+Discovery is **keyless**: `initialize`, `tools/list`, resources and prompts all work without credentials, so an agent can explore the full catalogue before authenticating. An API key (`Authorization: Bearer apier_live_…`) is needed only for protected tool calls. See https://www.apier.no/docs/authentication for how to get a key, then create one in the dashboard at https://www.apier.no/dashboard.
 
 ### npx stdio proxy (`@apier-no/mcp`)
 
