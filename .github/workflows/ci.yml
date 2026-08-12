@@ -33,6 +33,53 @@ jobs:
           cache: npm
       - name: Install
         run: npm ci --no-audit --no-fund
+      # .registry/server.json is submitted to the MCP registry by hand — nothing
+      # in this repo publishes it, so an invalid manifest is only discovered at
+      # submission time. PR #37 shipped a 261-character description against the
+      # 100-character ServerDetail.description maxLength in the schema the file
+      # itself declares. This assertion is deliberately offline (no schema fetch)
+      # so CI never depends on registry availability; it encodes the one limit
+      # that actually bit us plus the version drift that would bite next.
+      - name: Sanity — .registry/server.json manifest
+        run: |
+          set -euo pipefail
+          node -e '
+            const fs = require("fs");
+            const manifest = JSON.parse(fs.readFileSync(".registry/server.json", "utf8"));
+            const pkgVersion = JSON.parse(fs.readFileSync("package.json", "utf8")).version;
+            const MAX_DESCRIPTION = 100;
+            const errors = [];
+
+            if (typeof manifest.description !== "string") {
+              errors.push("description is missing or not a string");
+            }
+            const len = typeof manifest.description === "string" ? [...manifest.description].length : 0;
+            if (len > MAX_DESCRIPTION) {
+              errors.push(`description is ${len} characters, schema maxLength is ${MAX_DESCRIPTION}`);
+            }
+
+            // Every "version" key at any depth (top level and each packages[] entry)
+            // must track package.json, so a release bump cannot half-land.
+            const walk = (node, path) => {
+              if (Array.isArray(node)) { node.forEach((v, i) => walk(v, `${path}[${i}]`)); return; }
+              if (node === null || typeof node !== "object") return;
+              for (const [key, value] of Object.entries(node)) {
+                const here = path ? `${path}.${key}` : key;
+                if (key === "version" && value !== pkgVersion) {
+                  errors.push(`${here} is ${JSON.stringify(value)}, package.json version is ${JSON.stringify(pkgVersion)}`);
+                }
+                walk(value, here);
+              }
+            };
+            walk(manifest, "");
+
+            if (errors.length) {
+              console.error("ERROR: .registry/server.json failed manifest checks:");
+              for (const e of errors) console.error("  - " + e);
+              process.exit(1);
+            }
+            console.log(`OK — manifest parses, description ${len}/${MAX_DESCRIPTION} chars, all version fields match ${pkgVersion}`);
+          '
       - name: Type-check
         run: npm run lint
       - name: Test

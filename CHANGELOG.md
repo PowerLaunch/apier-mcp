@@ -8,8 +8,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - README "Try without a key" section: live-verified examples for the keyless sandbox mirror under `/api/v1/sandbox/` on apier.no, plus the `apier_test_` vs `apier_sandbox_test_` prefix disambiguation. Closes audit finding P13 (OPERATION-SANDBOX-RAINY-DAY §7).
-- One keyless-sandbox sentence in the MCP registry server description (`.registry/server.json`) and the npm `package.json` description, so the sandbox is visible on npm and the MCP registry at the next release. `APIER_API_KEY` stays `isRequired: true` — production tools still require a key.
+- One keyless-sandbox sentence in the npm `package.json` description, so the sandbox is visible on npm at the next release. `APIER_API_KEY` stays `isRequired: true` — production tools still require a key.
 - `.coderabbit.yaml` (template from apier-quickstart, pruned to this repo's CI: auto-reviews OFF, profile chill, scanner tools disabled).
+
+### Changed
+- CI's `build` job gained an offline `.registry/server.json` assertion: the manifest must parse, its description must stay within the schema's 100-character limit, and every `version` field in it must equal `package.json`'s. No network fetch, so CI never depends on registry availability.
+- README: a non-rendering comment above the keyless-sandbox `verify` example records why the example bearer's suffix is `$RANDOM`. The token prefix alone is 19 characters — one short of the tarball-audit secret-blocklist threshold — so substituting a literal suffix would fail CI.
+
+### Fixed
+- `.registry/server.json` description shortened from 261 to 85 characters. The `2025-12-11` server schema that the file itself declares caps `ServerDetail.description` at 100 characters, so the longer text would have been rejected on submission to the MCP registry; nothing in this repo publishes the manifest, so the rejection would only have surfaced at submission time. The keyless-sandbox sentence was dropped from this manifest rather than relocated — the schema defines no long-form prose field to carry it — and `package.json`'s unconstrained description still carries it, so npm search visibility is unaffected.
 
 ## [1.2.0] - 2026-08-11
 

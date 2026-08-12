@@ -68,6 +68,17 @@ Trimmed response — `…` marks omitted fields:
 
 Verify the bankrupt fixture company with a self-invented bearer — any suffix of 1–64 chars from `A-Za-z0-9_-` after `apier_sandbox_test_` works; here bash's `$RANDOM` supplies one. (This call goes to the `www` host directly: the apex→www 308 redirect makes curl drop the `Authorization` header.)
 
+<!--
+  CI COUPLING — keep $RANDOM in the command below; do not substitute a literal
+  suffix. README.md ships inside the npm tarball, and the tarball-audit job in
+  .github/workflows/ci.yml greps the packed files for secret-shaped strings.
+  One of its patterns is the word Bearer, then whitespace, then 20 or more
+  characters from [A-Za-z0-9._+/=-]. The sandbox token prefix on the next line
+  is exactly 19 of those characters, and `$` falls outside the class, so the
+  run stops at 19 and the pattern does not match. Any literal suffix pushes it
+  to 20 or more and fails CI.
+-->
+
 ```bash
 curl -s -H "Authorization: Bearer apier_sandbox_test_$RANDOM" https://www.apier.no/api/v1/sandbox/company/999660010/verify
 ```
