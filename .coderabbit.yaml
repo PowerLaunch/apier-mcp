@@ -1,0 +1,66 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+#
+# CodeRabbit cost gate, carried over from PowerLaunch/apier-quickstart (its PR #11)
+# and pruned to this repo's CI reality.
+#
+# CodeRabbit is a PAID per-review reviewer; CI is not. `reviews.auto_review.enabled:
+# false` below is the ENFORCEMENT mechanism for "exactly one review per PR":
+# CodeRabbit never fires unopted. Each review is requested explicitly with an
+# `@coderabbitai review` comment, against a HEAD that CI has already settled.
+reviews:
+  profile: chill
+  high_level_summary_placeholder: '@coderabbitai summary'
+  review_details: true
+  fail_commit_status: true
+  sequence_diagrams: false
+  estimate_code_review_effort: false
+  assess_linked_issues: false
+  related_issues: false
+  suggested_labels: false
+  suggested_reviewers: false
+  in_progress_fortune: false
+  poem: false
+  auto_review:
+    # OFF by design — see the header. Reviews are opted in explicitly, once per PR.
+    enabled: false
+    auto_pause_after_reviewed_commits: 100
+    base_branches:
+      - ".*"
+  # Generated / machine-authored files only. Hand-written source is NEVER filtered
+  # out.
+  path_filters:
+    - "!package-lock.json"
+    - "!**/*.lock"
+  # Gitleaks already runs as a dedicated required workflow in this repo
+  # (.github/workflows/gitleaks.yml) — paying CodeRabbit to re-run it buys
+  # duplicate findings on a diff the free gate has already cleared. The remaining
+  # scanners have no CI job in this repo (ci.yml runs tsc, vitest and a tarball
+  # audit) and stay disabled per the org-wide cost gate from apier-quickstart.
+  tools:
+    gitleaks:
+      enabled: false
+    semgrep:
+      enabled: false
+    checkov:
+      enabled: false
+    osv-scanner:
+      enabled: false
+    markdownlint:
+      enabled: false
+    languagetool:
+      enabled: false
+  finishing_touches:
+    docstrings:
+      enabled: false
+  pre_merge_checks:
+    docstrings:
+      mode: 'off'
+    title:
+      mode: 'off'
+    description:
+      mode: 'off'
+    issue_assessment:
+      mode: 'off'
+chat:
+  art: false
+  auto_reply: false

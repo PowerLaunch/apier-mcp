@@ -47,6 +47,53 @@ All 25 tools exposed by the hosted server at `https://www.apier.no/api/mcp` (dis
 | `get_credit_balance` | Call this BEFORE a batch of metered calls to confirm the calling key's prepaid credit balance covers it, and AFTER a 402 INSUFFICIENT_CREDITS + human top-up to verify the funds landed before retrying. |
 | `redeem_issuance_token` | Call this to convert an owner-issued key-issuance token into your own API key — the headless onboarding step for an agent that holds no credential yet. |
 
+## Try without a key
+
+Every Category B company endpoint has a zero-auth sandbox mirror under `/api/v1/sandbox/` on apier.no — no signup: where a bearer is expected, you invent your own on the spot. These are direct HTTP calls to the Apier API; starting this npm proxy itself still requires `APIER_API_KEY` (see [Quickstart](#quickstart)).
+
+List the canonical sandbox test data (no auth at all):
+
+```bash
+curl -sL https://apier.no/api/v1/sandbox/fixtures
+```
+
+Trimmed response — `…` marks omitted fields:
+
+```text
+{"success":true,"data":{"schema_version":"1.0.0",
+  "reserved_test_orgs":[{"org_number":"999000001","name":"Sandbox AS","entity_type":"AS","data_tier":"tier_1", …}],
+  "realistic_orgs":[{"org_number":"818000006","name":"Fjellberg Regnskap AS","entity_type":"AS","data_tier":"tier_1_2"}, …],
+  "magic_scenarios":[{"org_number":"999660010","state":"konkurs","label":"Bankrupt (konkurs)"}, …], …}}
+```
+
+Verify the bankrupt fixture company with a self-invented bearer — any suffix of 1–64 chars from `A-Za-z0-9_-` after `apier_sandbox_test_` works; here bash's `$RANDOM` supplies one. (This call goes to the `www` host directly: the apex→www 308 redirect makes curl drop the `Authorization` header.)
+
+<!--
+  CI COUPLING — keep $RANDOM in the command below; do not substitute a literal
+  suffix. README.md ships inside the npm tarball, and the tarball-audit job in
+  .github/workflows/ci.yml greps the packed files for secret-shaped strings.
+  One of its patterns is the word Bearer, then whitespace, then 20 or more
+  characters from [A-Za-z0-9._+/=-]. The sandbox token prefix on the next line
+  is exactly 19 of those characters, and `$` falls outside the class, so the
+  run stops at 19 and the pattern does not match. Any literal suffix pushes it
+  to 20 or more and fails CI.
+-->
+
+```bash
+curl -s -H "Authorization: Bearer apier_sandbox_test_$RANDOM" https://www.apier.no/api/v1/sandbox/company/999660010/verify
+```
+
+Trimmed response — `…` marks omitted fields:
+
+```text
+{"success":true,"data":{"org_number":"999660010","name":"Sandbox Konkurs AS",
+  "verification_status":"fail",
+  "signals":{"is_active":false,"not_bankrupt":false, …},
+  "summary":"Selskapet er ikke aktivt registrert i Enhetsregisteret.", …}}
+```
+
+Don't confuse the two test prefixes: `apier_test_` is a production test-mode key that requires signup, while `apier_sandbox_test_` is self-generated and keyless. `GET /api/v1/sandbox/fixtures` is the canonical machine-readable table of sandbox test data.
+
 ## Quickstart
 
 ### Hosted endpoint (streamable HTTP)
