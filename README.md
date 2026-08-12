@@ -49,7 +49,7 @@ All 25 tools exposed by the hosted server at `https://www.apier.no/api/mcp` (dis
 
 ## Try without a key
 
-Every Category B company endpoint has a zero-auth sandbox mirror under `/api/v1/sandbox/` on apier.no — no signup: where a bearer is expected, you invent your own on the spot.
+Every Category B company endpoint has a zero-auth sandbox mirror under `/api/v1/sandbox/` on apier.no — no signup: where a bearer is expected, you invent your own on the spot. These are direct HTTP calls to the Apier API; starting this npm proxy itself still requires `APIER_API_KEY` (see [Quickstart](#quickstart)).
 
 List the canonical sandbox test data (no auth at all):
 
@@ -57,20 +57,24 @@ List the canonical sandbox test data (no auth at all):
 curl -sL https://apier.no/api/v1/sandbox/fixtures
 ```
 
-```json
+Trimmed response — `…` marks omitted fields:
+
+```text
 {"success":true,"data":{"schema_version":"1.0.0",
   "reserved_test_orgs":[{"org_number":"999000001","name":"Sandbox AS","entity_type":"AS","data_tier":"tier_1", …}],
   "realistic_orgs":[{"org_number":"818000006","name":"Fjellberg Regnskap AS","entity_type":"AS","data_tier":"tier_1_2"}, …],
   "magic_scenarios":[{"org_number":"999660010","state":"konkurs","label":"Bankrupt (konkurs)"}, …], …}}
 ```
 
-Verify the bankrupt fixture company with a self-invented bearer — any suffix after `apier_sandbox_test_` works. (This call goes to the `www` host directly: the apex→www 308 redirect makes curl drop the `Authorization` header.)
+Verify the bankrupt fixture company with a self-invented bearer — any suffix of 1–64 chars from `A-Za-z0-9_-` after `apier_sandbox_test_` works; here bash's `$RANDOM` supplies one. (This call goes to the `www` host directly: the apex→www 308 redirect makes curl drop the `Authorization` header.)
 
 ```bash
-curl -s -H "Authorization: Bearer apier_sandbox_test_docs_example" https://www.apier.no/api/v1/sandbox/company/999660010/verify
+curl -s -H "Authorization: Bearer apier_sandbox_test_$RANDOM" https://www.apier.no/api/v1/sandbox/company/999660010/verify
 ```
 
-```json
+Trimmed response — `…` marks omitted fields:
+
+```text
 {"success":true,"data":{"org_number":"999660010","name":"Sandbox Konkurs AS",
   "verification_status":"fail",
   "signals":{"is_active":false,"not_bankrupt":false, …},
