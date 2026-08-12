@@ -1,7 +1,7 @@
 {
   "name": "@apier-no/mcp",
-  "version": "1.2.0",
-  "description": "Apier MCP Server — Norwegian company data and compliance for AI agents. Hardened thin proxy connecting local MCP clients (Claude Desktop, Cursor, VS Code, Zed) to Apier's hosted MCP server at https://www.apier.no/api/mcp: Brønnøysund company data, Altinn 3 compliance, signing authority, filing deadlines and fullmakt.",
+  "version": "1.2.1",
+  "description": "Apier MCP Server — Norwegian company data and compliance for AI agents. Hardened thin proxy connecting local MCP clients (Claude Desktop, Cursor, VS Code, Zed) to Apier's hosted MCP server at https://www.apier.no/api/mcp: Brønnøysund company data, Altinn 3 compliance, signing authority, filing deadlines and fullmakt. Try it without a key via the keyless sandbox mirror under /api/v1/sandbox/ on apier.no.",
   "type": "module",
   "bin": {
     "apier-mcp": "dist/cli.js"

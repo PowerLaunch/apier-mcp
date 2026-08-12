@@ -4,6 +4,13 @@ All notable changes to `@apier-no/mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-08-12
+
+### Added
+- README "Try without a key" section: live-verified examples for the keyless sandbox mirror under `/api/v1/sandbox/` on apier.no, plus the `apier_test_` vs `apier_sandbox_test_` prefix disambiguation. Closes audit finding P13 (OPERATION-SANDBOX-RAINY-DAY §7).
+- One keyless-sandbox sentence in the MCP registry server description (`.registry/server.json`) and the npm `package.json` description, so the sandbox is visible on npm and the MCP registry at the next release. `APIER_API_KEY` stays `isRequired: true` — production tools still require a key.
+- `.coderabbit.yaml` (template from apier-quickstart, pruned to this repo's CI: auto-reviews OFF, profile chill, scanner tools disabled).
+
 ## [1.2.0] - 2026-08-11
 
 ### Security

@@ -47,6 +47,38 @@ All 25 tools exposed by the hosted server at `https://www.apier.no/api/mcp` (dis
 | `get_credit_balance` | Call this BEFORE a batch of metered calls to confirm the calling key's prepaid credit balance covers it, and AFTER a 402 INSUFFICIENT_CREDITS + human top-up to verify the funds landed before retrying. |
 | `redeem_issuance_token` | Call this to convert an owner-issued key-issuance token into your own API key — the headless onboarding step for an agent that holds no credential yet. |
 
+## Try without a key
+
+Every Category B company endpoint has a zero-auth sandbox mirror under `/api/v1/sandbox/` on apier.no — no signup: where a bearer is expected, you invent your own on the spot.
+
+List the canonical sandbox test data (no auth at all):
+
+```bash
+curl -sL https://apier.no/api/v1/sandbox/fixtures
+```
+
+```json
+{"success":true,"data":{"schema_version":"1.0.0",
+  "reserved_test_orgs":[{"org_number":"999000001","name":"Sandbox AS","entity_type":"AS","data_tier":"tier_1", …}],
+  "realistic_orgs":[{"org_number":"818000006","name":"Fjellberg Regnskap AS","entity_type":"AS","data_tier":"tier_1_2"}, …],
+  "magic_scenarios":[{"org_number":"999660010","state":"konkurs","label":"Bankrupt (konkurs)"}, …], …}}
+```
+
+Verify the bankrupt fixture company with a self-invented bearer — any suffix after `apier_sandbox_test_` works. (This call goes to the `www` host directly: the apex→www 308 redirect makes curl drop the `Authorization` header.)
+
+```bash
+curl -s -H "Authorization: Bearer apier_sandbox_test_docs_example" https://www.apier.no/api/v1/sandbox/company/999660010/verify
+```
+
+```json
+{"success":true,"data":{"org_number":"999660010","name":"Sandbox Konkurs AS",
+  "verification_status":"fail",
+  "signals":{"is_active":false,"not_bankrupt":false, …},
+  "summary":"Selskapet er ikke aktivt registrert i Enhetsregisteret.", …}}
+```
+
+Don't confuse the two test prefixes: `apier_test_` is a production test-mode key that requires signup, while `apier_sandbox_test_` is self-generated and keyless. `GET /api/v1/sandbox/fixtures` is the canonical machine-readable table of sandbox test data.
+
 ## Quickstart
 
 ### Hosted endpoint (streamable HTTP)
