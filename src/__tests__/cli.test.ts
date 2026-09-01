@@ -114,7 +114,7 @@ describe("spawn argv — API key must not be observable via process inspection (
 
 describe("AUTH_HEADER_ARG — contract with mcp-remote's parser", () => {
   // Pins the two upstream behaviours this fix depends on, both read out of the
-  // pinned mcp-remote 0.1.38 bundle. If a future bump changes either, this
+  // pinned mcp-remote 0.8.1 bundle. If a future bump changes either, this
   // fails loudly rather than silently sending an unauthenticated request.
   it("satisfies mcp-remote's --header parse regex, yielding the placeholder as the value", () => {
     const match = AUTH_HEADER_ARG.match(/^([A-Za-z0-9_-]+):\s*(.*)$/);
