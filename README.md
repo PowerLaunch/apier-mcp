@@ -108,7 +108,9 @@ Discovery is **keyless**: `initialize`, `tools/list`, resources and prompts all 
 
 ### npx stdio proxy (`@apier-no/mcp`)
 
-For stdio-only clients, this package wraps [`mcp-remote`](https://github.com/geelen/mcp-remote), reads `APIER_API_KEY` from your environment, removes it from the spawned child's environment, redacts it from stderr, and hands the bearer value over out-of-band so it never appears on the child's command line — see [SECURITY.md](./SECURITY.md).
+For stdio-only clients, this package wraps [`mcp-remote`](https://github.com/punkpeye/mcp-remote), reads `APIER_API_KEY` from your environment, removes it from the spawned child's environment, redacts it from stderr, and hands the bearer value over out-of-band so it never appears on the child's command line — see [SECURITY.md](./SECURITY.md).
+
+`mcp-remote` moved from `geelen/mcp-remote` to `punkpeye/mcp-remote`; the npm package name is unchanged, and 0.8.1 is published with SLSA provenance attestations.
 
 **Published as `@apier-no/mcp`.** The `@apier` scope was unavailable, so this package ships under the `@apier-no` scope.
 

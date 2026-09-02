@@ -4,6 +4,12 @@ All notable changes to `@apier-no/mcp` are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+- Dependency bumps: `mcp-remote` 0.1.38 → 0.8.1, `@types/node` 20.19.41 → 26.4.0 (dev), `vitest` 4.1.10 → 4.1.11 (dev).
+- `mcp-remote` transferred maintainership from `geelen/mcp-remote` to `punkpeye/mcp-remote`. The npm package name is unchanged and 0.8.1 ships SLSA provenance attestations, published from GitHub Actions. The two upstream behaviours the #33 fix depends on were re-verified against the 0.8.1 bundle rather than assumed: `--header` values still expand `${NAME}` from the child's own environment, and that expansion still runs after both the `Using custom headers: …` log and `getServerUrlHash()`. Its custom-headers diagnostic now lists header names only, so it no longer prints the placeholder either — strictly less to redact than under 0.1.38. Documentation that described the old placeholder-printing behaviour was corrected to match.
+
 ## [1.2.1] - 2026-08-12
 
 ### Added
@@ -22,7 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 - **`APIER_API_KEY` no longer appears in the spawned child's command line** ([#33](https://github.com/PowerLaunch/apier-mcp/issues/33)). The `--header` argv element previously interpolated the live key as `Authorization: Bearer <key>`, which any local user could read from `/proc/<pid>/cmdline` (world-readable on Linux) or `ps aux`. It now carries only the literal placeholder `Authorization:${APIER_MCP_AUTH_HEADER}`, and the bearer value is handed to `mcp-remote` in the `APIER_MCP_AUTH_HEADER` environment variable, which it expands into the request header. Process environments are readable only by the owner and root, so the key is no longer exposed to other local users.
-- `mcp-remote` logs its custom headers *before* expanding the placeholder, so its `Using custom headers: …` diagnostic now prints `${APIER_MCP_AUTH_HEADER}` instead of the live key.
+- The live key never reaches `mcp-remote`'s `Using custom headers: …` diagnostic. That line is emitted before the placeholder is expanded, and it lists header *names* only — so neither `${APIER_MCP_AUTH_HEADER}` nor the key itself is written to it.
 - The key no longer feeds `mcp-remote`'s `getServerUrlHash()`, so it is not part of the md5 that names files under `~/.mcp-auth`.
 
 ### Changed

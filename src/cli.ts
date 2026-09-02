@@ -212,7 +212,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     } else if (a.startsWith("-")) {
       throw new Error(`Unknown flag: ${a}. Run apier-mcp --help for supported options.`);
     } else {
-      // Reject non-flag positionals too. mcp-remote 0.1.38 parses args[0] as the
+      // Reject non-flag positionals too. mcp-remote 0.8.1 parses args[0] as the
       // server URL and args[1] as the OAuth callback port; we always supply the
       // trusted endpoint as args[0], so a forwarded positional would only become
       // a malformed port (parseInt("https://...") = NaN) — the Authorization
@@ -273,11 +273,12 @@ const ENV_DENY_SUBSTRINGS = ["TOKEN", "SECRET", "BEARER", "KEY", "PASSWORD", "CR
  * Env var carrying `Bearer <key>` to the child, replacing the old
  * `--header "Authorization: Bearer <key>"` argv element (issue #33).
  *
- * mcp-remote 0.1.38 expands `${NAME}` occurrences inside every --header VALUE
+ * mcp-remote 0.8.1 expands `${NAME}` occurrences inside every --header VALUE
  * from its own process.env (dist/chunk-*.js, parseCommandLineArgs) — verified
  * against the pinned version, not assumed. Two properties matter:
- *   • The expansion runs AFTER mcp-remote logs "Using custom headers: …", so
- *     that log line now prints the placeholder rather than the live key.
+ *   • Its "Using custom headers: …" diagnostic logs header NAMES only
+ *     (Object.keys(headers)), so no header value — placeholder or live key —
+ *     reaches that log line at all.
  *   • The expansion also runs AFTER getServerUrlHash(), so the key no longer
  *     feeds the md5 that names files under ~/.mcp-auth. That hash is now
  *     identical across keys for a given endpoint — harmless here because we
