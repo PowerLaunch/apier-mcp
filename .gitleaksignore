@@ -1,0 +1,16 @@
+# Gitleaks fingerprints that are confirmed non-secrets. One per line, with the
+# reason. The fingerprint is commit:file:rule:line, exactly as the gitleaks
+# report prints it. The weekly scheduled scan (gitleaks.yml, cron, fetch-depth 0,
+# no --log-opts) covers the FULL history, so a historical false positive fails
+# that run even after the line itself is gone from HEAD.
+#
+# README.md at 26a60478 (2026-08-12), curl example in the "Try without a key"
+# section: `Authorization: Bearer apier_sandbox_test_<12 random letters>`. That
+# is the self-invented sandbox bearer the surrounding prose describes ("any
+# suffix after apier_sandbox_test_ works"). It is not a credential: the sandbox
+# auth mirror accepts any apier_sandbox_test_ suffix, bypasses the api_keys
+# lookup and never calls a government upstream, so there is nothing to rotate.
+# The literal appears once in history and nowhere on HEAD. Flagged by the
+# default curl-auth-header rule once this repo started extending the default
+# ruleset (K14, CS9, PR #57).
+26a60478dbbb93dc59f26789454af6dbbc13f57f:README.md:curl-auth-header:67
