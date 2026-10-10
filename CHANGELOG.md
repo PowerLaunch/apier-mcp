@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - `mcpName: "no.apier/mcp"` in `package.json`, so the MCP registry can verify this npm package against the `no.apier/mcp` server entry and list it under `packages` (K14, CS9 #39).
 - The stderr redactor also strips bare `apr_<tier>_…` API keys and `apr_issue_…` key-issuance tokens (one `apr_[a-z]+_` pattern), not only the `Bearer …` form; tests cover both token kinds and pin that the documented `apr_<tier>_<your_key_here>` placeholder is left intact (CS9 #42).
+- The CI tarball audit (`tarball-audit` job) now also blocks the `apr_[a-z]+_[A-Za-z0-9_-]{8,}` key shape (`apr_<tier>_…` keys and `apr_issue_…` tokens), the same regex the redactor uses, and `.gitleaks.toml` carries a matching `apier-apr-key` rule on top of the default ruleset; a real Apier key can no longer reach the npm tarball or the git history unflagged (K14, CS9).
 
 ### Changed
 - README, CLI help, the four `examples/` configs and `.registry/server.json` now show the key shape Apier actually issues, `apr_<tier>_…` (`apr_free_`, `apr_starter_`, `apr_pro_`, `apr_ent_`), in place of `apier_live_` / `apier_test_`, which were never issued (CS9 #9).
