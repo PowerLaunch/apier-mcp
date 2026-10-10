@@ -154,10 +154,14 @@ jobs:
           # src/cli.ts. The README placeholder apr_<tier>_<your_key_here> and the
           # bare prefixes (apr_free_, apr_issue_) do not match: `[a-z]+` needs
           # letters right after apr_ and the tail needs 8+ key characters.
-          if grep -rEn \
+          # `-l` lists only the offending FILES. The earlier `-n` form echoed the
+          # matching line, so a real key caught here would have been written to
+          # the public job log, which GitHub does not mask (CodeRabbit, Major).
+          if HITS=$(grep -rEl \
             'BEGIN [A-Z ]*PRIVATE KEY|apier_(live|test)_[A-Za-z0-9_-]{8,}|apr_[a-z]+_[A-Za-z0-9_-]{8,}|Bearer[[:space:]]+[A-Za-z0-9._+/=-]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}' \
-            /tmp/unpack/ ; then
-            echo "ERROR: tarball contents include a secret-shaped string"
+            /tmp/unpack/ ); then
+            echo "ERROR: tarball contents include a secret-shaped string in:"
+            echo "$HITS"
             exit 1
           fi
           echo "OK — tarball clean"
