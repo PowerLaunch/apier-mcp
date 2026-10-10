@@ -6,7 +6,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- `mcpName: "no.apier/mcp"` in `package.json`, so the MCP registry can verify this npm package against the `no.apier/mcp` server entry and list it under `packages` (K14, CS9 #39).
+- The stderr redactor also strips bare `apr_<tier>_…` API keys and `apr_issue_…` key-issuance tokens (one `apr_[a-z]+_` pattern), not only the `Bearer …` form; tests cover both token kinds and pin that the documented `apr_<tier>_<your_key_here>` placeholder is left intact (CS9 #42).
+
 ### Changed
+- README, CLI help, the four `examples/` configs and `.registry/server.json` now show the key shape Apier actually issues, `apr_<tier>_…` (`apr_free_`, `apr_starter_`, `apr_pro_`, `apr_ent_`), in place of `apier_live_` / `apier_test_`, which were never issued (CS9 #9).
+- README "Try without a key" opens with the requirement that starting the proxy needs `APIER_API_KEY`, describes the `/api/v1/sandbox/` mirror as a self-invented-bearer surface rather than "zero-auth" (the truly zero-auth mirror is `/api/v1/sandbox/public/` for org 999999999), and explains the sandbox-bearer path through the hosted MCP endpoint, where the nine fixture-backed company tools route to the sandbox with `_meta.is_sandbox: true` (CS9 #10, #26). `package.json`'s description carries the same correction, and `homepage` is the canonical `https://www.apier.no`.
+- README tool table re-synced with the live `tools/list` of 2026-10-10 (CS9 #5).
+
+### Fixed
+- README no longer claims `apier_test_` is "a production test-mode key that requires signup"; no key of that shape exists.
+
+### Changed (earlier)
 - Dependency bumps: `mcp-remote` 0.1.38 → 0.8.1, `@types/node` 20.19.41 → 26.4.0 (dev), `vitest` 4.1.10 → 4.1.11 (dev).
 - `mcp-remote` transferred maintainership from `geelen/mcp-remote` to `punkpeye/mcp-remote`. The npm package name is unchanged and 0.8.1 ships SLSA provenance attestations, published from GitHub Actions. The two upstream behaviours the #33 fix depends on were re-verified against the 0.8.1 bundle rather than assumed: `--header` values still expand `${NAME}` from the child's own environment, and that expansion still runs after both the `Using custom headers: …` log and `getServerUrlHash()`. Its custom-headers diagnostic now lists header names only, so it no longer prints the placeholder either — strictly less to redact than under 0.1.38. Documentation that described the old placeholder-printing behaviour was corrected to match.
 

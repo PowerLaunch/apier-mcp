@@ -30,6 +30,13 @@ const VERSION = pkg.version;
 
 const SECRET_PATTERNS: RegExp[] = [
   /Bearer\s+[A-Za-z0-9._\-+/=]{8,}/gi,
+  // Real Apier keys are `apr_<tier>_<random>` (apr_free_, apr_starter_,
+  // apr_pro_, apr_ent_) and key-issuance tokens are `apr_issue_<random>`; the
+  // single `[a-z]+` segment covers every current tier and the issue prefix
+  // without a list to keep in sync. A bare key in a log line (no "Bearer"
+  // in front) would otherwise slip past the pattern above (CS9 #42).
+  /apr_[a-z]+_[A-Za-z0-9_\-]{8,}/g,
+  // Legacy shape, kept so a token of that form is still never echoed.
   /apier_(live|test)_[A-Za-z0-9_\-]{8,}/g,
   /ghp_[A-Za-z0-9]{20,}/g,
   /Authorization:\s*[^\s,;]+/gi,
@@ -252,7 +259,7 @@ Example MCP client config (Claude Desktop / Cursor):
       "apier": {
         "command": "npx",
         "args": ["-y", "@apier-no/mcp"],
-        "env": { "APIER_API_KEY": "apier_live_<your_key_here>" }
+        "env": { "APIER_API_KEY": "apr_<tier>_<your_key_here>" }
       }
     }
   }

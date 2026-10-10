@@ -17,39 +17,42 @@ With this server connected, an AI agent can answer questions like:
 
 ## Tools
 
-All 25 tools exposed by the hosted server at `https://www.apier.no/api/mcp` (discovered live via `tools/list`):
+All 25 tools exposed by the hosted server at `https://www.apier.no/api/mcp` (discovered live via `tools/list` on 2026-10-10; each row is the opening sentence of the live description, so the full text is one `tools/list` call away):
 
 | Tool | Description |
 |---|---|
-| `get_company_summary` | Retrieve a one-shot compliance summary for a Norwegian organisation by its 9-digit organisasjonsnummer (organisation number, the public ID issued by the Brønnøysund Register Centre / Enhetsregisteret — Central Register of Legal Entities). |
-| `get_public_obligations` | Retrieve the universal obligation set for a Norwegian entity type. |
-| `get_exchange_rate` | Fetch the most recent Norges Bank (Norway's central bank, Norges Bank in Norwegian — the official issuer of the krone) exchange-rate reference for a currency against NOK. |
+| `get_company_summary` | A one-shot summary of obligations and deadlines for a Norwegian organisation: your FIRST call when you orient against a company. |
+| `get_public_obligations` | Keyless. Retrieve the universal obligation set for a Norwegian entity type — every regulatory obligation that applies by virtue of BEING that organisational form, before per-company Tier-2 data is layered on. |
+| `get_exchange_rate` | Keyless. Norges Bank reference exchange rate for a currency against NOK — the benchmark Norwegian tax and accounting rules accept for foreign-currency obligations. |
 | `list_acting_capacity` | Resolve every Norwegian regulatory action a person is currently authorised to perform on behalf of a specific organisation. |
-| `get_company_profile` | Resolve a Norwegian organisasjonsnummer (9-digit org number) into a structured company profile sourced from Brønnøysund Enhetsregisteret (data.brreg.no). |
-| `check_authorization` | Return the authorisation snapshot for the calling consumer's delegation on a Norwegian organisation. |
-| `get_company_context` | Retrieve the structured Brønnøysund identity slice for a Norwegian organisation by its 9-digit organisasjonsnummer (organisation number, the public ID issued by the Brønnøysund Register Centre / Enhetsregisteret — Central Register of Legal Entities). |
-| `get_company_deadlines` | Compute the upcoming Norwegian regulatory filing calendar for a specific organisation, looking horizon_months into the future. |
-| `get_company_obligations` | Evaluate the Apier Rulebook for a Norwegian organisation and return every applicable regulatory obligation with its current state and the legal reference it derives from. |
-| `get_public_deadlines` | Compute the universal Norwegian regulatory filing calendar — the set of deadlines that apply to every Norwegian business of the covered categories (MVA, A-melding, Årsregnskap), independent of any specific organisation. |
-| `validate_action` | Run the Apier dry-run validator against a proposed regulatory action without producing ANY upstream side effect — no Maskinporten call, no Altinn / Skatteetaten / NAV submission. |
-| `explain_compliance_error` | Resolve a structured Apier compliance error code into a Norwegian-bokmål Explanation envelope sourced from the Apier Compliance Explainer (PR-049). |
-| `search_companies` | Resolve a Norwegian company NAME to its 9-digit organisasjonsnummer (organisation number). |
-| `get_company_verification` | Get the deterministic verification verdict for a Norwegian organisation by its 9-digit organisasjonsnummer (organisation number, the public ID issued by the Brønnøysund Register Centre / Enhetsregisteret). |
-| `get_company_authority` | Use this to answer "who can legally sign for this Norwegian company, and how?" before acting on its behalf. |
-| `get_company_accounts` | Use this for a current-snapshot read of a Norwegian company's annual accounts (årsregnskap) from the OPEN Regnskapsregisteret tier. |
-| `get_company_filing_history` | Use this to reconcile a Norwegian company's Altinn 3 filing history against the filings YOUR consumer submitted through Apier — the accountant/auditor reconciliation wedge. |
-| `list_changes` | Use this to read Apier's cross-source change archive — detected created / updated / deleted events across the upstreams Apier polls: Brønnøysund ingestion plus the multi-source pollers for Altinn schemas, DigDir policies, and Norges Bank rates. |
-| `get_altinn_migration_guidance` | Use this to discover the Altinn 3 equivalent of an Altinn 2 service or role code. |
-| `request_fullmakt` | Broker a fullmakt — a legally-grounded, scoped, revocable company→agent authority delegated through an Altinn systembruker (system user). |
-| `check_fullmakt` | Check your fullmakt state for a Norwegian company BEFORE acting on its behalf — the read leg of AGT-02 Fullmakt Rails and the natural follow-up to request_fullmakt. |
+| `get_company_profile` | Resolve a Norwegian organisasjonsnummer (9 digits) into a structured company profile from Brønnøysund Enhetsregisteret: display name, form of organisation, NACE codes with descriptions, addresses, the dates of registration and dissolution, the `active` / `dissolved` status enum, the MVA-registered flag, and the role CODES of persons — never personal identifiers. |
+| `check_authorization` | Return the authorisation snapshot for the calling consumer's delegation on a Norwegian organisation: the `status` enum (`full` / `partial` / `none`), `active_scopes`, `missing_scopes` (empty on `full`) and `delegated_rights`. |
+| `get_company_context` | Brønnøysund identity slice for a Norwegian organisation: legal name, form of organisation, NACE codes, addresses, the dates it was formed or dissolved, and the signaturrett / prokura role-code summary (never personal identifiers). |
+| `get_company_deadlines` | The upcoming filing calendar for one organisation, horizon_months ahead. |
+| `get_company_obligations` | Evaluate the Apier Rulebook for a Norwegian organisation: one entry per rule with rule_id, obligation_name, evaluation_result (applicable, not_applicable or insufficient_data), a reason, the legal_reference, frequency, data_tier_required and the bokmål description, which is inherited byte for byte (never re-translate it). |
+| `get_public_deadlines` | Keyless. The universal Norwegian filing calendar: the deadlines for every Norwegian business in the covered categories (MVA, A-melding, Skattemelding, Årsregnskap), which do not depend on any one organisation. |
+| `validate_action` | Dry-run a proposed regulatory action with NO upstream side effect (no government call). |
+| `explain_compliance_error` | Keyless. Resolve a structured Apier compliance error code into a Norwegian-bokmål Explanation envelope: summary, bokmål why, ordered fix_steps, optional documentation link + legal_basis, and an optional handover block (who / where / what / why) for errors a human must resolve. |
+| `search_companies` | Resolve a Norwegian company NAME to its 9-digit organisasjonsnummer. |
+| `get_company_verification` | Fast go / no-go trust check before you act for a Norwegian organisation. |
+| `get_company_authority` | Who can legally sign for this Norwegian company, and how? |
+| `get_company_accounts` | A current snapshot of a Norwegian company's annual accounts (årsregnskap) from the OPEN Regnskapsregisteret tier: `has_filed_annual_accounts` (null = unknown, never a fabricated false), `last_accounts_year` and that year's minimal `key_figures` (currency always surfaced, presentation basis, totals). |
+| `get_company_filing_history` | Reconcile a company's Altinn 3 filing history against the filings YOUR consumer submitted through Apier: each Altinn instance paired with its Apier audit record (`filed_via_apier` + `apier_record`). |
+| `list_changes` | Read Apier's cross-source change archive — created / updated / deleted events detected across the upstreams Apier polls (Brønnøysund, Altinn schemas, Norges Bank, NAV, Skatteetaten Tier-2; the Digdir poller is retired, so `digdir` is a valid but empty filter). |
+| `get_altinn_migration_guidance` | Discover the Altinn 3 equivalent of an Altinn 2 service or role code. |
+| `request_fullmakt` | Broker a fullmakt — scoped, revocable company→agent authority via an Altinn systembruker. |
+| `check_fullmakt` | Check your fullmakt state for a Norwegian company BEFORE acting on its behalf. |
 | `revoke_fullmakt` | Revoke a fullmakt — withdraw an agent's delegated authority for a Norwegian company and retire the agent principal. |
 | `get_pricing` | Call this BEFORE metered work to check per-call cost and whether billing enforcement is live. |
-| `get_credit_balance` | Call this BEFORE a batch of metered calls to confirm the calling key's prepaid credit balance covers it, and AFTER a 402 INSUFFICIENT_CREDITS + human top-up to verify the funds landed before retrying. |
-| `redeem_issuance_token` | Call this to convert an owner-issued key-issuance token into your own API key — the headless onboarding step for an agent that holds no credential yet. |
+| `get_credit_balance` | Call this BEFORE a batch of metered calls to confirm the calling key's prepaid credit balance covers it, and AFTER a 402 INSUFFICIENT_CREDITS + human top-up to verify the funds landed. |
+| `redeem_issuance_token` | Convert an owner-issued key-issuance token into your own API key — the headless onboarding step for an agent that holds no credential yet. |
 
 ## Try without a key
 
-Every Category B company endpoint has a zero-auth sandbox mirror under `/api/v1/sandbox/` on apier.no — no signup: where a bearer is expected, you invent your own on the spot. These are direct HTTP calls to the Apier API; starting this npm proxy itself still requires `APIER_API_KEY` (see [Quickstart](#quickstart)).
+**Starting this proxy requires `APIER_API_KEY`** (see [Quickstart](#quickstart)). The proxy forwards whatever bearer you give it as `Authorization: Bearer …` and never inspects the key's shape. Without a real key you still have two sandbox paths, both served from synthetic fixtures and never from a government register:
+
+- **Direct HTTP to the sandbox mirror** under `/api/v1/sandbox/` on apier.no. Every Category B company endpoint has a mirror there. It is not zero-auth: it expects a *self-invented* sandbox bearer, `apier_sandbox_test_<suffix>` (any suffix of 1–64 characters from `A-Za-z0-9_-`), which the server recognises by its prefix and answers with fixtures — no signup and no key store behind it. A separate, truly zero-auth mirror lives under `/api/v1/sandbox/public/` for the single fixture org `999999999`.
+- **The same sandbox bearer on the hosted MCP endpoint** `https://www.apier.no/api/mcp`. Send `Authorization: Bearer apier_sandbox_test_<suffix>` and the fixture-backed company tools (`get_company_context`, `get_company_obligations`, `get_company_deadlines`, `get_company_summary`, `get_company_verification`, `explain_compliance_error`, `get_company_authority`, `get_company_accounts`, `get_company_filing_history`) are routed to the sandbox mirror, with `_meta.is_sandbox: true` on every result; the remaining tools answer exactly as they would without a key. Because this proxy forwards the bearer unchanged, setting `APIER_API_KEY` to such a value lets a stdio client rehearse those tools against fixtures too.
 
 List the canonical sandbox test data (no auth at all):
 
@@ -92,7 +95,7 @@ Trimmed response — `…` marks omitted fields:
   "summary":"Selskapet er ikke aktivt registrert i Enhetsregisteret.", …}}
 ```
 
-Don't confuse the two test prefixes: `apier_test_` is a production test-mode key that requires signup, while `apier_sandbox_test_` is self-generated and keyless. `GET /api/v1/sandbox/fixtures` is the canonical machine-readable table of sandbox test data.
+Don't confuse the two prefixes: a real API key is `apr_<tier>_…` (`apr_free_`, `apr_starter_`, `apr_pro_` or `apr_ent_`) and comes from signup via https://www.apier.no/docs/authentication, while `apier_sandbox_test_` is self-generated and needs no signup. (Earlier README versions mentioned `apier_live_` / `apier_test_` keys; no key of that shape was ever issued.) `GET /api/v1/sandbox/fixtures` is the canonical machine-readable table of sandbox test data.
 
 ## Quickstart
 
@@ -104,7 +107,7 @@ The fastest path — no install. Point any streamable-HTTP-capable MCP client at
 https://www.apier.no/api/mcp
 ```
 
-Discovery is **keyless**: `initialize`, `tools/list`, resources and prompts all work without credentials, so an agent can explore the full catalogue before authenticating. An API key (`Authorization: Bearer apier_live_…`) is needed only for protected tool calls. See https://www.apier.no/docs/authentication for how to get a key, then create one in the dashboard at https://www.apier.no/dashboard.
+Discovery is **keyless**: `initialize`, `tools/list`, resources and prompts all work without credentials, so an agent can explore the full catalogue before authenticating. An API key (`Authorization: Bearer apr_<tier>_…`) is needed only for protected tool calls. See https://www.apier.no/docs/authentication for how to get a key, then create one in the dashboard at https://www.apier.no/dashboard.
 
 ### npx stdio proxy (`@apier-no/mcp`)
 
@@ -122,7 +125,7 @@ For stdio-only clients, this package wraps [`mcp-remote`](https://github.com/pun
     "apier": {
       "command": "npx",
       "args": ["-y", "@apier-no/mcp"],
-      "env": { "APIER_API_KEY": "apier_live_<your_key_here>" }
+      "env": { "APIER_API_KEY": "apr_<tier>_<your_key_here>" }
     }
   }
 }
@@ -137,7 +140,7 @@ For stdio-only clients, this package wraps [`mcp-remote`](https://github.com/pun
       "type": "stdio",
       "command": "npx",
       "args": ["-y", "@apier-no/mcp"],
-      "env": { "APIER_API_KEY": "apier_live_<your_key_here>" }
+      "env": { "APIER_API_KEY": "apr_<tier>_<your_key_here>" }
     }
   }
 }
@@ -152,7 +155,7 @@ For stdio-only clients, this package wraps [`mcp-remote`](https://github.com/pun
       "source": "custom",
       "command": "npx",
       "args": ["-y", "@apier-no/mcp"],
-      "env": { "APIER_API_KEY": "apier_live_<your_key_here>" }
+      "env": { "APIER_API_KEY": "apr_<tier>_<your_key_here>" }
     }
   }
 }
@@ -170,7 +173,7 @@ Ready-to-paste config files for each client live in [`examples/`](./examples).
 
 ## Security
 
-- `APIER_API_KEY` is read by the parent process and **scrubbed from the spawned child's environment**, and stderr is passed through a redactor that strips `Bearer …`, `apier_(live|test)_…`, `ghp_…`, and `Authorization:` substrings.
+- `APIER_API_KEY` is read by the parent process and **scrubbed from the spawned child's environment**, and stderr is passed through a redactor that strips `Bearer …`, bare `apr_<tier>_…` keys and `apr_issue_…` key-issuance tokens, the legacy `apier_(live|test)_…` shape, `ghp_…`, and `Authorization:` substrings.
 - **The key never appears in the child's command line.** The `--header` argument carries only the placeholder `Authorization:${APIER_MCP_AUTH_HEADER}`; the bearer value is passed out-of-band in that variable and expanded by `mcp-remote` at request time. Command lines are world-readable on Linux (`/proc/<pid>/cmdline`), process environments are not — so this is no longer readable by other local users ([#33](https://github.com/PowerLaunch/apier-mcp/issues/33), fixed in 1.2.0). An attacker already running as you can still read the environment — see [SECURITY.md](./SECURITY.md).
 - Non-https endpoints are rejected before spawn; `mcp-remote` is exact-pinned and releases are published with npm provenance via GitHub Actions Trusted Publishing (OIDC).
 - Treat client config files (`claude_desktop_config.json`, `.cursor/mcp.json`, …) like `.env` files — never commit them with a real key.
