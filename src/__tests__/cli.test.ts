@@ -230,9 +230,38 @@ describe("redaction patterns", () => {
     const fs = await import("node:fs/promises");
     const src = await fs.readFile(new URL("../cli.ts", import.meta.url), "utf8");
     expect(src).toMatch(/Bearer\\s\+/);
+    expect(src).toMatch(/apr_\[a-z\]\+_/);
     expect(src).toMatch(/apier_\(live\|test\)_/);
     expect(src).toMatch(/ghp_/);
     expect(src).toMatch(/Authorization:/);
+  });
+
+  // CS9 #42 — a real key or issuance token logged WITHOUT a "Bearer " prefix
+  // must still be redacted.
+  it("redacts bare apr_<tier>_ keys and apr_issue_ tokens", () => {
+    const out: string[] = [];
+    const r = createStderrRedactor((s) => out.push(s));
+    r.push("key=apr_free_abcdefghijklmnopqrstuvwxyz012345 tier=free\n");
+    r.push("retrying with apr_pro_ZYXWVUTSRQPONMLKJIHGFEDCBA98765\n");
+    r.push("redeem token apr_issue_0123456789abcdefghijklmnopqrstuv now\n");
+    const joined = out.join("");
+    expect(joined).not.toContain("apr_free_abcdefghijklmnopqrstuvwxyz012345");
+    expect(joined).not.toContain("apr_pro_ZYXWVUTSRQPONMLKJIHGFEDCBA98765");
+    expect(joined).not.toContain("apr_issue_0123456789abcdefghijklmnopqrstuv");
+    expect(joined.match(/\*\*\*REDACTED\*\*\*/g)).toHaveLength(3);
+    // The surrounding words survive: only the token is replaced.
+    expect(joined).toContain("key=***REDACTED*** tier=free");
+  });
+
+  it("leaves the documented apr_<tier>_<your_key_here> placeholder intact (edge case)", () => {
+    const out: string[] = [];
+    const r = createStderrRedactor((s) => out.push(s));
+    r.push('"APIER_API_KEY": "apr_<tier>_<your_key_here>"\n');
+    r.push("short apr_free_abc is not a key\n");
+    const joined = out.join("");
+    expect(joined).toContain("apr_<tier>_<your_key_here>");
+    expect(joined).toContain("apr_free_abc");
+    expect(joined).not.toContain("***REDACTED***");
   });
 });
 

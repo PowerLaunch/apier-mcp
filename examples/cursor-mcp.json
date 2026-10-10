@@ -3,7 +3,7 @@
     "apier": {
       "command": "npx",
       "args": ["-y", "@apier-no/mcp"],
-      "env": { "APIER_API_KEY": "apier_live_<your_key_here>" }
+      "env": { "APIER_API_KEY": "apr_<tier>_<your_key_here>" }
     }
   }
 }

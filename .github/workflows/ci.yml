@@ -149,10 +149,31 @@ jobs:
             echo "ERROR: tarball contains forbidden filenames"
             exit 1
           fi
-          if grep -rEn \
-            'BEGIN [A-Z ]*PRIVATE KEY|apier_(live|test)_[A-Za-z0-9_-]{8,}|Bearer[[:space:]]+[A-Za-z0-9._+/=-]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}' \
-            /tmp/unpack/ ; then
-            echo "ERROR: tarball contents include a secret-shaped string"
+          # apr_[a-z]+_… is the shape Apier actually issues (apr_<tier>_ keys and
+          # apr_issue_ key-issuance tokens) and mirrors the stderr redactor in
+          # src/cli.ts. The README placeholder apr_<tier>_<your_key_here> and the
+          # bare prefixes (apr_free_, apr_issue_) do not match: `[a-z]+` needs
+          # letters right after apr_ and the tail needs 8+ key characters.
+          # `-l` lists only the offending FILES. The earlier `-n` form echoed the
+          # matching line, so a real key caught here would have been written to
+          # the public job log, which GitHub does not mask (CodeRabbit, Major).
+          # Fail CLOSED. grep exits 0 on a match, 1 on no match, 2 on an error
+          # (unreadable or missing path). Inside `if …; then` an exit 2 is just
+          # "false", so the old form printed "OK — tarball clean" when the scan
+          # never ran. Only exit 1 with empty output is a pass; anything else
+          # fails, and the matched lines are never printed.
+          set +e
+          HITS=$(grep -rEl \
+            'BEGIN [A-Z ]*PRIVATE KEY|apier_(live|test)_[A-Za-z0-9_-]{8,}|apr_[a-z]+_[A-Za-z0-9_-]{8,}|Bearer[[:space:]]+[A-Za-z0-9._+/=-]{20,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}' \
+            /tmp/unpack/ )
+          GREP_RC=$?
+          set -e
+          if [ "$GREP_RC" -eq 0 ]; then
+            echo "ERROR: tarball contents include a secret-shaped string in:"
+            echo "$HITS"
+            exit 1
+          elif [ "$GREP_RC" -ne 1 ] || [ -n "$HITS" ]; then
+            echo "ERROR: tarball audit could not run (grep exit $GREP_RC)"
             exit 1
           fi
           echo "OK — tarball clean"

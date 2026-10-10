@@ -3,6 +3,24 @@
 # The repo-wide *.test.ts(x) scope is intentional: it mirrors PowerLaunch/apier
 # (the monorepo this config was matched to). Narrowing to src/ was considered
 # (CodeRabbit) and deferred to keep parity with the monorepo (PR #10).
+#
+# Declaring any [[rules]] block REPLACES gitleaks' built-in ruleset unless
+# [extend] useDefault is set, so the custom apr_ rule below is added on top of
+# the defaults, never instead of them (same shape as the monorepo's config).
+[extend]
+useDefault = true
+
+# Apier API keys are apr_<tier>_<random> (apr_free_, apr_starter_, apr_pro_,
+# apr_ent_) and key-issuance tokens are apr_issue_<random>. No default gitleaks
+# rule knows this shape. The regex is the one the stderr redactor in src/cli.ts
+# and the CI tarball audit use; the documented placeholder
+# apr_<tier>_<your_key_here> does not match it.
+[[rules]]
+  id = "apier-apr-key"
+  description = "Apier API key or key-issuance token (apr_<tier>_… / apr_issue_…)"
+  regex = '''apr_[a-z]+_[A-Za-z0-9_-]{8,}'''
+  keywords = ["apr_"]
+
 [allowlist]
   paths = [
     '''.*\.test\.ts$''',
