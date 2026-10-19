@@ -1,0 +1,262 @@
+# Dependabot triage: every Dependabot PR either merges itself after CI passes
+# or reaches Tony's phone. Nothing waits to be found by chance.
+#
+#   a) semver patch or minor of ONE npm dependency whose current version is
+#      >= 1.0.0: squash auto-merge, which merges only after CI passes.
+#   b) a major bump, a bump from 0.x (where a minor can break), a grouped
+#      update, a github-actions update (GITHUB_TOKEN cannot merge workflow
+#      changes) or anything fetch-metadata cannot classify: no auto-merge, ONE
+#      ntfy push with the PR title and link when the PR opens.
+#   c) CI fails on a Dependabot PR: ONE ntfy push per failed CI run, with the
+#      PR link and the failing jobs.
+#
+# CI must pass before anything merges, even while CI is not yet a required
+# check on main. Auto-merge is enabled up front only when main requires the CI
+# checks; otherwise rule (a) PRs get the `dependabot-automerge` label and the
+# `ci-result` job enables auto-merge (or squash-merges directly when auto-merge
+# is unavailable) only after CI succeeded on the PR's current head and every
+# other check on that head is green.
+#
+# Security: pull_request_target and workflow_run run with a write token in the
+# base repository, so no step ever checks out or runs code from the PR. Values
+# from the PR (title, branch, URL) reach shell only through env vars, never
+# through ${{ }} inside a script. The ntfy topic is a secret: it is only ever
+# read from env and never printed (curl output goes to /dev/null, because
+# ntfy's response body echoes the topic).
+name: Dependabot triage
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions: {}
+
+env:
+  # Job names from ci.yml that count as "CI" when checking whether main
+  # requires CI before auto-merge may be enabled up front.
+  CI_CHECKS: 'build (20),build (22),tarball-audit'
+  AUTOMERGE_LABEL: dependabot-automerge
+
+jobs:
+  triage:
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.repository == 'PowerLaunch/apier-mcp'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: dependabot-triage-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        # v3.1.0
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Classify the update
+        id: classify
+        env:
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          PREVIOUS_VERSION: ${{ steps.metadata.outputs.previous-version }}
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+        run: |
+          set -euo pipefail
+          decision=review
+          reason=""
+          major=""
+          if [[ "$PREVIOUS_VERSION" =~ ^v?([0-9]+)\. ]]; then
+            major="${BASH_REMATCH[1]}"
+          fi
+          if [ "$ECOSYSTEM" != "npm_and_yarn" ]; then
+            reason="ecosystem ${ECOSYSTEM:-unknown} needs a human merge"
+          elif [ -z "$DEPENDENCY_NAMES" ] || [[ "$DEPENDENCY_NAMES" == *,* ]]; then
+            reason="grouped or unnamed update"
+          elif [ -z "$major" ]; then
+            reason="current version '${PREVIOUS_VERSION}' is not semver"
+          elif [ "$major" -eq 0 ]; then
+            reason="current version ${PREVIOUS_VERSION} is 0.x, where a minor can break"
+          elif [ "$UPDATE_TYPE" = "version-update:semver-patch" ] || [ "$UPDATE_TYPE" = "version-update:semver-minor" ]; then
+            decision=automerge
+            reason="${UPDATE_TYPE#version-update:} bump from ${PREVIOUS_VERSION}"
+          else
+            reason="${UPDATE_TYPE:-unknown update type} from ${PREVIOUS_VERSION}"
+          fi
+          echo "decision=$decision" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "Decision: $decision ($reason)"
+
+      - name: "Rule a: label, and enable auto-merge if main requires CI"
+        if: steps.classify.outputs.decision == 'automerge'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          gh label create "$AUTOMERGE_LABEL" --color 0e8a16 \
+            --description "Dependabot patch/minor >= 1.0.0: merges after CI passes" --force \
+            || echo "::warning::could not create or update label $AUTOMERGE_LABEL; adding it anyway"
+          gh pr edit "$PR_URL" --add-label "$AUTOMERGE_LABEL"
+
+          # Required checks from rulesets and from classic branch protection.
+          required=$( {
+            gh api "repos/$GH_REPO/rules/branches/$BASE_REF" \
+              --jq '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context'
+            gh api "repos/$GH_REPO/branches/$BASE_REF" \
+              --jq '.protection.required_status_checks.contexts // [] | .[]'
+          } | sort -u )
+          ci_required=false
+          IFS=',' read -ra ci_checks <<< "$CI_CHECKS"
+          for c in "${ci_checks[@]}"; do
+            if grep -qxF "$c" <<< "$required"; then ci_required=true; fi
+          done
+
+          if [ "$ci_required" = true ]; then
+            gh pr merge "$PR_URL" --auto --squash
+            echo "Auto-merge (squash) enabled; GitHub merges once the required CI checks pass."
+          else
+            echo "::notice::CI is not a required check on $BASE_REF, so auto-merge waits for the ci-result job (after CI passes)."
+          fi
+
+      - name: "Rule b: push for a manual review"
+        if: >-
+          steps.classify.outputs.decision == 'review' &&
+          (github.event.action == 'opened' || github.event.action == 'reopened')
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          REASON: ${{ steps.classify.outputs.reason }}
+        run: |
+          set -euo pipefail
+          if [ -z "${NTFY_TOPIC:-}" ]; then
+            echo "::warning::NTFY_TOPIC secret is not set; push skipped for $PR_URL"
+            exit 0
+          fi
+          curl -fsS --max-time 20 -o /dev/null \
+            -H "Title: apier-mcp: Dependabot PR needs your review" \
+            -H "Click: $PR_URL" \
+            -H "Tags: dependabot" \
+            --data-binary "$PR_TITLE ($REASON). $PR_URL" \
+            "https://ntfy.sh/$NTFY_TOPIC"
+          echo "Push sent for $PR_URL"
+
+  ci-result:
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.actor.login == 'dependabot[bot]' &&
+      github.repository == 'PowerLaunch/apier-mcp'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    steps:
+      - name: Find the pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          pr=$(gh pr list --head "$HEAD_BRANCH" --state open --author 'app/dependabot' \
+            --json number,url,title,headRefOid,labels,autoMergeRequest --jq '.[0] // empty')
+          if [ -z "$pr" ]; then
+            echo "No open Dependabot PR for $HEAD_BRANCH"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          {
+            echo "found=true"
+            echo "number=$(jq -r .number <<< "$pr")"
+            echo "url=$(jq -r .url <<< "$pr")"
+            echo "current=$(jq -r --arg sha "$HEAD_SHA" '.headRefOid == $sha' <<< "$pr")"
+            echo "labeled=$(jq -r --arg l "$AUTOMERGE_LABEL" '[.labels[].name] | index($l) != null' <<< "$pr")"
+            echo "automerge_on=$(jq -r '.autoMergeRequest != null' <<< "$pr")"
+            echo "title<<__TITLE_EOF__"
+            jq -r .title <<< "$pr"
+            echo "__TITLE_EOF__"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: "Rule c: push when CI failed"
+        if: >-
+          steps.pr.outputs.found == 'true' &&
+          github.event.workflow_run.conclusion != 'success' &&
+          github.event.workflow_run.conclusion != 'cancelled' &&
+          github.event.workflow_run.conclusion != 'skipped'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+        run: |
+          set -euo pipefail
+          failed=$(gh api "repos/$GH_REPO/actions/runs/$RUN_ID/jobs" --paginate \
+            --jq '.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name' \
+            | paste -sd ',' - | sed 's/,/, /g')
+          if [ -z "${NTFY_TOPIC:-}" ]; then
+            echo "::warning::NTFY_TOPIC secret is not set; CI-failure push skipped for $PR_URL"
+            exit 0
+          fi
+          curl -fsS --max-time 20 -o /dev/null \
+            -H "Title: apier-mcp: CI failed on a Dependabot PR" \
+            -H "Click: $PR_URL" \
+            -H "Tags: dependabot,warning" \
+            --data-binary "$PR_TITLE: CI $CONCLUSION (failing: ${failed:-see run}). $PR_URL  Run: $RUN_URL" \
+            "https://ntfy.sh/$NTFY_TOPIC"
+          echo "CI-failure push sent for $PR_URL"
+
+      - name: "Rule a: merge only after CI passed"
+        if: >-
+          steps.pr.outputs.found == 'true' &&
+          github.event.workflow_run.conclusion == 'success' &&
+          steps.pr.outputs.current == 'true' &&
+          steps.pr.outputs.labeled == 'true' &&
+          steps.pr.outputs.automerge_on != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          PR_URL: ${{ steps.pr.outputs.url }}
+        run: |
+          set -euo pipefail
+          # Every check on the head must be finished and green, not only CI
+          # (Gitleaks runs beside it). Anything else leaves the PR alone.
+          not_green=$(gh pr view "$PR_URL" --json statusCheckRollup --jq '
+            [.statusCheckRollup[]
+             | select(
+                 (.__typename == "CheckRun" and (.status != "COMPLETED" or ((.conclusion // "") | IN("SUCCESS","NEUTRAL","SKIPPED") | not)))
+                 or (.__typename == "StatusContext" and .state != "SUCCESS"))
+             | (.name // .context)] | join(", ")')
+          if [ -n "$not_green" ]; then
+            echo "::notice::Not merging $PR_URL yet; checks not green: $not_green"
+            exit 0
+          fi
+          if gh pr merge "$PR_URL" --auto --squash --match-head-commit "$HEAD_SHA"; then
+            echo "Auto-merge (squash) requested after CI passed."
+          else
+            # Auto-merge is unavailable (repository setting off, or the PR is
+            # already in a clean state): CI has passed on this exact head, so
+            # squash-merge it directly, pinned to the head that passed.
+            gh pr merge "$PR_URL" --squash --match-head-commit "$HEAD_SHA"
+            echo "Squash-merged after CI passed on $HEAD_SHA."
+          fi
