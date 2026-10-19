@@ -50,7 +50,7 @@
   "author": "Grov Digital (org.nr. 833 397 982)",
   "license": "MIT",
   "dependencies": {
-    "mcp-remote": "0.14.3"
+    "mcp-remote": "0.15.1"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
