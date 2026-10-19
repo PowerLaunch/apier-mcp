@@ -2,7 +2,7 @@
 # or reaches Tony's phone. Nothing waits to be found by chance.
 #
 #   a) semver patch or minor of ONE npm dependency whose current version is
-#      >= 1.0.0: squash auto-merge, which merges only after CI passes.
+#      >= 1.0.0: squash merge, only after every check in CI_CHECKS passed.
 #   b) a major bump, a bump from 0.x (where a minor can break), a grouped
 #      update, a github-actions update (GITHUB_TOKEN cannot merge workflow
 #      changes) or anything fetch-metadata cannot classify: no auto-merge, ONE
@@ -181,9 +181,26 @@ jobs:
           PR_URL: ${{ github.event.pull_request.html_url }}
         run: |
           set -uo pipefail
-          gh pr edit "$PR_URL" --remove-label "$AUTOMERGE_LABEL" >/dev/null 2>&1 || true
-          gh pr merge "$PR_URL" --disable-auto >/dev/null 2>&1 || true
-          echo "Rule b: $PR_URL carries no merge label and no auto-merge."
+          # Never fails the job: a cleanup that does not go through is a
+          # warning, and ci-result re-checks the label right before it merges.
+          if ! pr=$(gh pr view "$PR_URL" --json labels,autoMergeRequest 2>/dev/null); then
+            echo "::warning::could not read $PR_URL; label and auto-merge not checked"
+            exit 0
+          fi
+          if jq -e --arg l "$AUTOMERGE_LABEL" '[.labels[].name] | index($l) != null' <<< "$pr" >/dev/null; then
+            if gh pr edit "$PR_URL" --remove-label "$AUTOMERGE_LABEL" >/dev/null 2>&1; then
+              echo "Rule b: removed $AUTOMERGE_LABEL from $PR_URL"
+            else
+              echo "::warning::could not remove $AUTOMERGE_LABEL from $PR_URL"
+            fi
+          fi
+          if jq -e '.autoMergeRequest != null' <<< "$pr" >/dev/null; then
+            if gh pr merge "$PR_URL" --disable-auto >/dev/null 2>&1; then
+              echo "Rule b: disabled auto-merge on $PR_URL"
+            else
+              echo "::warning::could not disable auto-merge on $PR_URL"
+            fi
+          fi
 
       - name: "Rule b: push for a manual review"
         if: >-
@@ -306,9 +323,14 @@ jobs:
           # safety net reports it the next morning.
           deadline=$(( $(date +%s) + 600 ))
           while :; do
-            view=$(gh pr view "$PR_URL" --json state,headRefOid,statusCheckRollup)
+            view=$(gh pr view "$PR_URL" --json state,headRefOid,labels,statusCheckRollup)
             if [ "$(jq -r .state <<< "$view")" != "OPEN" ]; then
               echo "::notice::$PR_URL is no longer open; nothing to merge."
+              exit 0
+            fi
+            # Re-read on every poll: a PR that became rule (b) loses the label.
+            if ! jq -e --arg l "$AUTOMERGE_LABEL" '[.labels[].name] | index($l) != null' <<< "$view" >/dev/null; then
+              echo "::notice::$PR_URL no longer carries $AUTOMERGE_LABEL; not merging."
               exit 0
             fi
             if [ "$(jq -r .headRefOid <<< "$view")" != "$HEAD_SHA" ]; then
