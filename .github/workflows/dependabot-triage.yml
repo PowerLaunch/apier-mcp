@@ -9,13 +9,19 @@
 #      ntfy push with the PR title and link when the PR opens.
 #   c) CI fails on a Dependabot PR: ONE ntfy push per failed CI run, with the
 #      PR link and the failing jobs.
+#   d) Safety net, daily at 08:00 Oslo time (and on demand): ONE ntfy push per
+#      open Dependabot PR older than 24 hours, per day, with its link, how long
+#      it has been open and its check state. This catches a rule (a) PR that
+#      did not merge for any reason (a check still pending after the wait, a
+#      failed merge, a conflict) as well as a rule (b) PR nobody has merged.
 #
 # CI must pass before anything merges, even while CI is not yet a required
-# check on main. Auto-merge is enabled up front only when main requires the CI
-# checks; otherwise rule (a) PRs get the `dependabot-automerge` label and the
-# `ci-result` job enables auto-merge (or squash-merges directly when auto-merge
-# is unavailable) only after CI succeeded on the PR's current head and every
-# other check on that head is green.
+# check on main. Auto-merge is enabled up front only when main requires every
+# check in CI_CHECKS; otherwise rule (a) PRs get the `dependabot-automerge`
+# label and the `ci-result` job enables auto-merge (or squash-merges directly
+# when auto-merge is unavailable) only after CI succeeded on the PR's current
+# head and every check on that head, Gitleaks included, is green. Checks still
+# running are waited for, up to 10 minutes; a failed merge sends ONE push.
 #
 # Security: pull_request_target and workflow_run run with a write token in the
 # base repository, so no step ever checks out or runs code from the PR. Values
@@ -31,14 +37,43 @@ on:
   workflow_run:
     workflows: [CI]
     types: [completed]
+  schedule:
+    # cron runs in UTC only. 08:00 Europe/Oslo is 06:00 UTC in summer time and
+    # 07:00 UTC in winter time, so both are scheduled and the safety-net job
+    # goes ahead only for the one that is 08:00 in Oslo on that date.
+    - cron: '0 6 * * *'
+    - cron: '0 7 * * *'
+  workflow_dispatch:
 
 permissions: {}
 
 env:
-  # Job names from ci.yml that count as "CI" when checking whether main
-  # requires CI before auto-merge may be enabled up front.
-  CI_CHECKS: 'build (20),build (22),tarball-audit'
+  # Check names that must all be present and green before a rule (a) PR
+  # merges: the CI jobs from ci.yml plus Gitleaks from gitleaks.yml. Auto-merge
+  # is enabled up front only when main requires every one of them.
+  CI_CHECKS: 'build (20),build (22),tarball-audit,Gitleaks'
   AUTOMERGE_LABEL: dependabot-automerge
+  # Turns a PR's statusCheckRollup into {failed, pending, total}. A check is
+  # pending while it runs, and a name in $required (comma-separated) that has
+  # not reported yet counts as pending too, so an early "all green" can never
+  # come from a check that simply has not started.
+  CHECK_STATE_JQ: |
+    [.statusCheckRollup[]
+     | {name: (.name // .context),
+        s: (if .__typename == "CheckRun" then
+              (if .status != "COMPLETED" then "pending"
+               elif ((.conclusion // "") | IN("SUCCESS","NEUTRAL","SKIPPED")) then "green"
+               else "failed" end)
+            else
+              (if .state == "SUCCESS" then "green"
+               elif ((.state // "") | IN("PENDING","EXPECTED")) then "pending"
+               else "failed" end)
+            end)}] as $checks
+    | ([$checks[].name]) as $seen
+    | {failed: [$checks[] | select(.s == "failed") | .name],
+       pending: ([$checks[] | select(.s == "pending") | .name]
+                 + [$required | split(",")[] | select(. as $r | $seen | index($r) | not)]),
+       total: ($checks | length)}
 
 jobs:
   triage:
@@ -116,17 +151,20 @@ jobs:
             gh api "repos/$GH_REPO/branches/$BASE_REF" \
               --jq '.protection.required_status_checks.contexts // [] | .[]'
           } | sort -u )
-          ci_required=false
+          # Every name in CI_CHECKS must be required: if main required only
+          # some of them (say Gitleaks alone), GitHub auto-merge would merge
+          # before the rest of CI had passed.
+          ci_required=true
           IFS=',' read -ra ci_checks <<< "$CI_CHECKS"
           for c in "${ci_checks[@]}"; do
-            if grep -qxF "$c" <<< "$required"; then ci_required=true; fi
+            if ! grep -qxF "$c" <<< "$required"; then ci_required=false; fi
           done
 
           if [ "$ci_required" = true ]; then
             gh pr merge "$PR_URL" --auto --squash
-            echo "Auto-merge (squash) enabled; GitHub merges once the required CI checks pass."
+            echo "Auto-merge (squash) enabled; GitHub merges once the required checks pass."
           else
-            echo "::notice::CI is not a required check on $BASE_REF, so auto-merge waits for the ci-result job (after CI passes)."
+            echo "::notice::$BASE_REF does not require all of $CI_CHECKS, so auto-merge waits for the ci-result job (after CI passes)."
           fi
 
       - name: "Rule b: push for a manual review"
@@ -159,7 +197,8 @@ jobs:
       github.event.workflow_run.actor.login == 'dependabot[bot]' &&
       github.repository == 'PowerLaunch/apier-mcp'
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # Room for the merge step's 10-minute wait for checks still running.
+    timeout-minutes: 15
     permissions:
       contents: write
       pull-requests: write
@@ -237,26 +276,183 @@ jobs:
           GH_REPO: ${{ github.repository }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           PR_URL: ${{ steps.pr.outputs.url }}
+          PR_TITLE: ${{ steps.pr.outputs.title }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
         run: |
           set -euo pipefail
-          # Every check on the head must be finished and green, not only CI
-          # (Gitleaks runs beside it). Anything else leaves the PR alone.
-          not_green=$(gh pr view "$PR_URL" --json statusCheckRollup --jq '
-            [.statusCheckRollup[]
-             | select(
-                 (.__typename == "CheckRun" and (.status != "COMPLETED" or ((.conclusion // "") | IN("SUCCESS","NEUTRAL","SKIPPED") | not)))
-                 or (.__typename == "StatusContext" and .state != "SUCCESS"))
-             | (.name // .context)] | join(", ")')
-          if [ -n "$not_green" ]; then
-            echo "::notice::Not merging $PR_URL yet; checks not green: $not_green"
+          # Every check on the head must be finished and green, not only CI:
+          # Gitleaks runs beside it and can still be running when CI finishes.
+          # Wait for checks that are still running, polling every 30 seconds
+          # for up to 10 minutes. A failed check, a moved head or a check that
+          # is still pending after the wait leaves the PR alone; the daily
+          # safety net reports it the next morning.
+          deadline=$(( $(date +%s) + 600 ))
+          while :; do
+            view=$(gh pr view "$PR_URL" --json state,headRefOid,statusCheckRollup)
+            if [ "$(jq -r .state <<< "$view")" != "OPEN" ]; then
+              echo "::notice::$PR_URL is no longer open; nothing to merge."
+              exit 0
+            fi
+            if [ "$(jq -r .headRefOid <<< "$view")" != "$HEAD_SHA" ]; then
+              echo "::notice::$PR_URL has a newer head than $HEAD_SHA; the CI run on that head decides."
+              exit 0
+            fi
+            checks=$(jq --arg required "$CI_CHECKS" "$CHECK_STATE_JQ" <<< "$view")
+            failed=$(jq -r '.failed | join(", ")' <<< "$checks")
+            pending=$(jq -r '.pending | join(", ")' <<< "$checks")
+            if [ -n "$failed" ]; then
+              echo "::notice::Not merging $PR_URL; checks failed: $failed"
+              exit 0
+            fi
+            if [ -z "$pending" ]; then
+              break
+            fi
+            if [ "$(date +%s)" -ge "$deadline" ]; then
+              echo "::notice::Not merging $PR_URL; still pending after 10 minutes: $pending. The daily safety net reports it."
+              exit 0
+            fi
+            echo "Waiting 30 s for: $pending"
+            sleep 30
+          done
+
+          if out=$(gh pr merge "$PR_URL" --auto --squash --match-head-commit "$HEAD_SHA" 2>&1); then
+            echo "$out"
+            echo "Auto-merge (squash) requested after every check passed."
             exit 0
           fi
-          if gh pr merge "$PR_URL" --auto --squash --match-head-commit "$HEAD_SHA"; then
-            echo "Auto-merge (squash) requested after CI passed."
-          else
-            # Auto-merge is unavailable (repository setting off, or the PR is
-            # already in a clean state): CI has passed on this exact head, so
-            # squash-merge it directly, pinned to the head that passed.
-            gh pr merge "$PR_URL" --squash --match-head-commit "$HEAD_SHA"
-            echo "Squash-merged after CI passed on $HEAD_SHA."
+          echo "Auto-merge request failed: $out"
+          # Auto-merge is unavailable (repository setting off, or the PR is
+          # already in a clean state): every check has passed on this exact
+          # head, so squash-merge it directly, pinned to the head that passed.
+          if out=$(gh pr merge "$PR_URL" --squash --match-head-commit "$HEAD_SHA" 2>&1); then
+            echo "$out"
+            echo "Squash-merged after every check passed on $HEAD_SHA."
+            exit 0
           fi
+          err=$(printf '%s' "$out" | tr '\r\n' '  ' | cut -c1-300)
+          echo "::error::Squash-merge of $PR_URL failed: $err"
+          if [ -z "${NTFY_TOPIC:-}" ]; then
+            echo "::warning::NTFY_TOPIC secret is not set; merge-failure push skipped for $PR_URL"
+          else
+            curl -fsS --max-time 20 -o /dev/null \
+              -H "Title: apier-mcp: Dependabot merge failed" \
+              -H "Click: $PR_URL" \
+              -H "Tags: dependabot,warning" \
+              --data-binary "$PR_TITLE: gh pr merge failed after every check passed: $err. $PR_URL" \
+              "https://ntfy.sh/$NTFY_TOPIC" \
+              || echo "::warning::merge-failure push could not be sent for $PR_URL"
+          fi
+          exit 1
+
+  safety-net:
+    if: >-
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
+      github.repository == 'PowerLaunch/apier-mcp'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    concurrency:
+      group: dependabot-safety-net
+      cancel-in-progress: false
+    steps:
+      - name: Go ahead only at 08:00 Oslo time
+        id: gate
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          SCHEDULE: ${{ github.event.schedule }}
+        run: |
+          set -euo pipefail
+          day=$(TZ=Europe/Oslo date +%F)
+          run=false
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            run=true
+          elif [[ "$SCHEDULE" =~ ^0\ ([0-9]+)\ \* ]]; then
+            # The Oslo hour of the cron's own UTC slot on today's date, so a
+            # run GitHub starts late still counts for the slot it belongs to.
+            slot_hour=$(TZ=Europe/Oslo date -d "$(date -u +%F) ${BASH_REMATCH[1]}:00 UTC" +%H)
+            if [ "$slot_hour" = "08" ]; then run=true; fi
+          fi
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+          echo "day=$day" >> "$GITHUB_OUTPUT"
+          echo "Event $EVENT_NAME, schedule '${SCHEDULE}', Oslo date $day: run=$run"
+
+      # One push per PR per day: the PR numbers already pushed today are kept
+      # in a cache entry keyed by the Oslo date, so a manual run on the same
+      # day does not push them again.
+      - name: Restore today's push record
+        if: steps.gate.outputs.run == 'true'
+        # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: .safety-net
+          key: dependabot-safety-net-${{ steps.gate.outputs.day }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: dependabot-safety-net-${{ steps.gate.outputs.day }}-
+
+      - name: Push for each Dependabot PR open more than 24 hours
+        id: scan
+        if: steps.gate.outputs.run == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+        run: |
+          set -euo pipefail
+          mkdir -p .safety-net
+          touch .safety-net/pushed.txt
+          now=$(date -u +%s)
+          stale=$(gh pr list --author 'app/dependabot' --state open --limit 100 \
+              --json number,title,url,createdAt,mergeStateStatus,statusCheckRollup \
+            | jq -c --argjson now "$now" --arg required "$CI_CHECKS" \
+                "def checkstate: ${CHECK_STATE_JQ};"'
+                .[]
+                | ($now - (.createdAt | fromdateiso8601)) as $age
+                | select($age > 86400)
+                | {number, title, url, merge: .mergeStateStatus, age: $age, checks: checkstate}')
+          if [ -z "$stale" ]; then
+            echo "No Dependabot PR has been open more than 24 hours."
+            exit 0
+          fi
+          if [ -z "${NTFY_TOPIC:-}" ]; then
+            echo "::warning::NTFY_TOPIC secret is not set; safety-net pushes skipped"
+          fi
+          sent=0
+          while IFS= read -r pr; do
+            number=$(jq -r .number <<< "$pr")
+            url=$(jq -r .url <<< "$pr")
+            title=$(jq -r .title <<< "$pr")
+            age=$(jq -r '.age as $s | "\($s / 86400 | floor) d \($s % 86400 / 3600 | floor) h"' <<< "$pr")
+            state=$(jq -r '. as $pr | .checks as $c
+              | if ($c.failed | length) > 0 then "failing: " + ($c.failed | join(", "))
+                elif ($c.pending | length) > 0 then "pending: " + ($c.pending | join(", "))
+                else "all \($c.total) checks green" end
+              | . + ", merge state " + ($pr.merge // "UNKNOWN")' <<< "$pr")
+            if grep -qxF "$number" .safety-net/pushed.txt; then
+              echo "#$number already pushed today: open $age, $state"
+              continue
+            fi
+            echo "#$number open $age, $state"
+            [ -n "${NTFY_TOPIC:-}" ] || continue
+            if curl -fsS --max-time 20 -o /dev/null \
+                -H "Title: apier-mcp: Dependabot PR open $age" \
+                -H "Click: $url" \
+                -H "Tags: dependabot,hourglass" \
+                --data-binary "$title. Open $age; checks $state. $url" \
+                "https://ntfy.sh/$NTFY_TOPIC"; then
+              echo "$number" >> .safety-net/pushed.txt
+              sent=$((sent + 1))
+            else
+              echo "::warning::safety-net push could not be sent for $url"
+            fi
+          done <<< "$stale"
+          echo "sent=$sent" >> "$GITHUB_OUTPUT"
+          echo "Safety-net pushes sent: $sent"
+
+      - name: Save today's push record
+        if: always() && steps.gate.outputs.run == 'true' && steps.scan.outputs.sent != '' && steps.scan.outputs.sent != '0'
+        # v6.1.0
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+        with:
+          path: .safety-net
+          key: dependabot-safety-net-${{ steps.gate.outputs.day }}-${{ github.run_id }}-${{ github.run_attempt }}
