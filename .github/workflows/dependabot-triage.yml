@@ -18,10 +18,11 @@
 # CI must pass before anything merges, even while CI is not yet a required
 # check on main. Auto-merge is enabled up front only when main requires every
 # check in CI_CHECKS; otherwise rule (a) PRs get the `dependabot-automerge`
-# label and the `ci-result` job enables auto-merge (or squash-merges directly
-# when auto-merge is unavailable) only after CI succeeded on the PR's current
-# head and every check on that head, Gitleaks included, is green. Checks still
-# running are waited for, up to 10 minutes; a failed merge sends ONE push.
+# label and the `ci-result` job squash-merges them directly, pinned to the
+# head that passed, only after CI succeeded on the PR's current head and every
+# check on that head, Gitleaks included, is green. Checks still running are
+# waited for, up to 10 minutes; a failed merge sends ONE push. A PR that turns
+# into rule (b) loses the label and any auto-merge.
 #
 # Security: pull_request_target and workflow_run run with a write token in the
 # base repository, so no step ever checks out or runs code from the PR. Values
@@ -104,6 +105,7 @@ jobs:
           PREVIOUS_VERSION: ${{ steps.metadata.outputs.previous-version }}
           DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
           ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          DEPENDENCY_GROUP: ${{ steps.metadata.outputs.dependency-group }}
         run: |
           set -euo pipefail
           decision=review
@@ -114,7 +116,7 @@ jobs:
           fi
           if [ "$ECOSYSTEM" != "npm_and_yarn" ]; then
             reason="ecosystem ${ECOSYSTEM:-unknown} needs a human merge"
-          elif [ -z "$DEPENDENCY_NAMES" ] || [[ "$DEPENDENCY_NAMES" == *,* ]]; then
+          elif [ -n "${DEPENDENCY_GROUP:-}" ] || [ -z "$DEPENDENCY_NAMES" ] || [[ "$DEPENDENCY_NAMES" == *,* ]]; then
             reason="grouped or unnamed update"
           elif [ -z "$major" ]; then
             reason="current version '${PREVIOUS_VERSION}' is not semver"
@@ -166,6 +168,22 @@ jobs:
           else
             echo "::notice::$BASE_REF does not require all of $CI_CHECKS, so auto-merge waits for the ci-result job (after CI passes)."
           fi
+
+      # A PR that was rule (a) and is now rule (b) (Dependabot updated it in
+      # place to a major, 0.x or grouped bump) must lose everything that would
+      # merge it: the label the ci-result job merges on, and any auto-merge
+      # enabled earlier. Both commands are no-ops when there is nothing to undo.
+      - name: "Rule b: remove the merge label and auto-merge"
+        if: steps.classify.outputs.decision == 'review'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+        run: |
+          set -uo pipefail
+          gh pr edit "$PR_URL" --remove-label "$AUTOMERGE_LABEL" >/dev/null 2>&1 || true
+          gh pr merge "$PR_URL" --disable-auto >/dev/null 2>&1 || true
+          echo "Rule b: $PR_URL carries no merge label and no auto-merge."
 
       - name: "Rule b: push for a manual review"
         if: >-
@@ -315,15 +333,11 @@ jobs:
             sleep 30
           done
 
-          if out=$(gh pr merge "$PR_URL" --auto --squash --match-head-commit "$HEAD_SHA" 2>&1); then
-            echo "$out"
-            echo "Auto-merge (squash) requested after every check passed."
-            exit 0
-          fi
-          echo "Auto-merge request failed: $out"
-          # Auto-merge is unavailable (repository setting off, or the PR is
-          # already in a clean state): every check has passed on this exact
-          # head, so squash-merge it directly, pinned to the head that passed.
+          # Merge directly, pinned to the head that passed, and never through
+          # auto-merge: this job runs only while main does not require
+          # CI_CHECKS, so auto-merge left enabled on a PR that is blocked for
+          # another reason would later merge a NEWER head that no check has
+          # passed (--match-head-commit binds only the call that enables it).
           if out=$(gh pr merge "$PR_URL" --squash --match-head-commit "$HEAD_SHA" 2>&1); then
             echo "$out"
             echo "Squash-merged after every check passed on $HEAD_SHA."
