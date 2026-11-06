@@ -1,58 +1,49 @@
 # Apier MCP Server — Norwegian company data and compliance for AI agents
 
-[Apier](https://apier.no) is a hosted [MCP](https://modelcontextprotocol.io) (Model Context Protocol) server that gives AI agents structured access to Norwegian company data and regulatory compliance. It resolves any 9-digit **organisasjonsnummer** (organisation number) against **Brønnøysundregistrene** (the Brønnøysund Register Centre / Enhetsregisteret), answers who holds **signing authority** for a company (**signaturrett** and **prokura**), reads **annual accounts** (årsregnskap) from Regnskapsregisteret, computes **filing deadlines** for MVA, A-melding and Årsregnskap, and brokers **fullmakt** — scoped, revocable company→agent authority delegated through an **Altinn 3** systembruker, authenticated upstream via **Maskinporten** against **Skatteetaten** and other agencies. This repository is the thin, hardened npm proxy (`@apier-no/mcp`) that connects local stdio MCP clients to the hosted server.
+[Apier](https://apier.no) is a hosted [MCP](https://modelcontextprotocol.io) (Model Context Protocol) server that gives AI agents structured access to Norwegian company data and regulatory compliance. It resolves any 9-digit **organisasjonsnummer** (organisation number) against **Brønnøysundregistrene** (the Brønnøysund Register Centre / Enhetsregisteret), returns the register's coded signing rules for the company (**signaturrett** and **prokura**, uninterpreted), reads **annual accounts** (årsregnskap) from Regnskapsregisteret and computes **filing deadlines** for MVA, A-melding and Årsregnskap. It reads open public registers only: it submits nothing to government and brokers no government access. This repository is the thin, hardened npm proxy (`@apier-no/mcp`) that connects local stdio MCP clients to the hosted server.
 
 ## What you can ask
 
 With this server connected, an AI agent can answer questions like:
 
 - "What's the organisasjonsnummer for Equinor?" *(search_companies)*
-- "Who can legally sign on behalf of org number 923 609 016 — and is it signaturrett or prokura?" *(get_company_authority)*
+- "What are the register's coded signing rules for org number 923 609 016, signaturrett and prokura?" *(get_company_authority)*
 - "Is this company VAT-registered, and what regulatory obligations does it have?" *(get_company_summary)*
 - "What filing deadlines is this company facing in the next six months?" *(get_company_deadlines)*
 - "Show me the latest annual accounts (årsregnskap) for this company." *(get_company_accounts)*
 - "What is the Altinn 3 equivalent of this old Altinn 2 role code?" *(get_altinn_migration_guidance)*
 - "What's the current Norges Bank exchange rate for EUR to NOK?" *(get_exchange_rate)*
-- "Request a fullmakt so I can act on behalf of this company, then verify it before filing." *(request_fullmakt, check_fullmakt)*
 
 ## Tools
 
-All 25 tools exposed by the hosted server at `https://www.apier.no/api/mcp` (discovered live via `tools/list` on 2026-10-10; each row is the opening sentence of the live description, so the full text is one `tools/list` call away):
+The hosted server at `https://www.apier.no/api/mcp` publishes its current tool list, with each tool's full description and `required_scope`, at the keyless discovery endpoint `GET https://www.apier.no/api/mcp` (and through `tools/list`). That endpoint is the source of truth; this README keeps no count. On 2026-11-06 it listed:
 
-| Tool | Description |
-|---|---|
-| `get_company_summary` | A one-shot summary of obligations and deadlines for a Norwegian organisation: your FIRST call when you orient against a company. |
-| `get_public_obligations` | Keyless. Retrieve the universal obligation set for a Norwegian entity type — every regulatory obligation that applies by virtue of BEING that organisational form, before per-company Tier-2 data is layered on. |
-| `get_exchange_rate` | Keyless. Norges Bank reference exchange rate for a currency against NOK — the benchmark Norwegian tax and accounting rules accept for foreign-currency obligations. |
-| `list_acting_capacity` | Resolve every Norwegian regulatory action a person is currently authorised to perform on behalf of a specific organisation. |
-| `get_company_profile` | Resolve a Norwegian organisasjonsnummer (9 digits) into a structured company profile from Brønnøysund Enhetsregisteret: display name, form of organisation, NACE codes with descriptions, addresses, the dates of registration and dissolution, the `active` / `dissolved` status enum, the MVA-registered flag, and the role CODES of persons — never personal identifiers. |
-| `check_authorization` | Return the authorisation snapshot for the calling consumer's delegation on a Norwegian organisation: the `status` enum (`full` / `partial` / `none`), `active_scopes`, `missing_scopes` (empty on `full`) and `delegated_rights`. |
-| `get_company_context` | Brønnøysund identity slice for a Norwegian organisation: legal name, form of organisation, NACE codes, addresses, the dates it was formed or dissolved, and the signaturrett / prokura role-code summary (never personal identifiers). |
-| `get_company_deadlines` | The upcoming filing calendar for one organisation, horizon_months ahead. |
-| `get_company_obligations` | Evaluate the Apier Rulebook for a Norwegian organisation: one entry per rule with rule_id, obligation_name, evaluation_result (applicable, not_applicable or insufficient_data), a reason, the legal_reference, frequency, data_tier_required and the bokmål description, which is inherited byte for byte (never re-translate it). |
-| `get_public_deadlines` | Keyless. The universal Norwegian filing calendar: the deadlines for every Norwegian business in the covered categories (MVA, A-melding, Skattemelding, Årsregnskap), which do not depend on any one organisation. |
-| `validate_action` | Dry-run a proposed regulatory action with NO upstream side effect (no government call). |
-| `explain_compliance_error` | Keyless. Resolve a structured Apier compliance error code into a Norwegian-bokmål Explanation envelope: summary, bokmål why, ordered fix_steps, optional documentation link + legal_basis, and an optional handover block (who / where / what / why) for errors a human must resolve. |
-| `search_companies` | Resolve a Norwegian company NAME to its 9-digit organisasjonsnummer. |
-| `get_company_verification` | Fast go / no-go trust check before you act for a Norwegian organisation. |
-| `get_company_authority` | Who can legally sign for this Norwegian company, and how? |
-| `get_company_accounts` | A current snapshot of a Norwegian company's annual accounts (årsregnskap) from the OPEN Regnskapsregisteret tier: `has_filed_annual_accounts` (null = unknown, never a fabricated false), `last_accounts_year` and that year's minimal `key_figures` (currency always surfaced, presentation basis, totals). |
-| `get_company_filing_history` | Reconcile a company's Altinn 3 filing history against the filings YOUR consumer submitted through Apier: each Altinn instance paired with its Apier audit record (`filed_via_apier` + `apier_record`). |
-| `list_changes` | Read Apier's cross-source change archive — created / updated / deleted events detected across the upstreams Apier polls (Brønnøysund, Altinn schemas, Norges Bank, NAV, Skatteetaten Tier-2; the Digdir poller is retired, so `digdir` is a valid but empty filter). |
-| `get_altinn_migration_guidance` | Discover the Altinn 3 equivalent of an Altinn 2 service or role code. |
-| `request_fullmakt` | Broker a fullmakt — scoped, revocable company→agent authority via an Altinn systembruker. |
-| `check_fullmakt` | Check your fullmakt state for a Norwegian company BEFORE acting on its behalf. |
-| `revoke_fullmakt` | Revoke a fullmakt — withdraw an agent's delegated authority for a Norwegian company and retire the agent principal. |
-| `get_pricing` | Call this BEFORE metered work to check per-call cost and whether billing enforcement is live. |
-| `get_credit_balance` | Call this BEFORE a batch of metered calls to confirm the calling key's prepaid credit balance covers it, and AFTER a 402 INSUFFICIENT_CREDITS + human top-up to verify the funds landed. |
-| `redeem_issuance_token` | Convert an owner-issued key-issuance token into your own API key — the headless onboarding step for an agent that holds no credential yet. |
+- `get_company_summary`
+- `get_public_obligations`
+- `get_exchange_rate`
+- `get_company_profile`
+- `get_company_context`
+- `get_company_deadlines`
+- `get_company_obligations`
+- `get_public_deadlines`
+- `explain_compliance_error`
+- `search_companies`
+- `get_company_verification`
+- `get_company_authority`
+- `get_company_accounts`
+- `get_company_evidence_pack`
+- `list_changes`
+- `get_altinn_migration_guidance`
+- `get_pricing`
+- `get_credit_balance`
+- `redeem_issuance_token`
 
 ## Try without a key
 
 **Starting this proxy requires `APIER_API_KEY`** (see [Quickstart](#quickstart)). The proxy forwards whatever bearer you give it as `Authorization: Bearer …` and never inspects the key's shape. Without a real key you still have two sandbox paths, both served from synthetic fixtures and never from a government register:
 
 - **Direct HTTP to the sandbox mirror** under `/api/v1/sandbox/` on apier.no. Every Category B company endpoint has a mirror there. It is not zero-auth: it expects a *self-invented* sandbox bearer, `apier_sandbox_test_<suffix>` (any suffix of 1–64 characters from `A-Za-z0-9_-`), which the server recognises by its prefix and answers with fixtures — no signup and no key store behind it. A separate, truly zero-auth mirror lives under `/api/v1/sandbox/public/` for the single fixture org `999999999`.
-- **The same sandbox bearer on the hosted MCP endpoint** `https://www.apier.no/api/mcp`. Send `Authorization: Bearer apier_sandbox_test_<suffix>` and the fixture-backed company tools (`get_company_context`, `get_company_obligations`, `get_company_deadlines`, `get_company_summary`, `get_company_verification`, `explain_compliance_error`, `get_company_authority`, `get_company_accounts`, `get_company_filing_history`) are routed to the sandbox mirror, with `_meta.is_sandbox: true` on every result; the remaining tools answer exactly as they would without a key. Because this proxy forwards the bearer unchanged, setting `APIER_API_KEY` to such a value lets a stdio client rehearse those tools against fixtures too.
+- **The same sandbox bearer on the hosted MCP endpoint** `https://www.apier.no/api/mcp`. Send `Authorization: Bearer apier_sandbox_test_<suffix>` and the fixture-backed company tools (`get_company_context`, `get_company_obligations`, `get_company_deadlines`, `get_company_summary`, `get_company_verification`, `explain_compliance_error`, `get_company_authority`, `get_company_accounts`) are routed to the sandbox mirror, with `_meta.is_sandbox: true` on every result; the remaining tools answer exactly as they would without a key. Because this proxy forwards the bearer unchanged, setting `APIER_API_KEY` to such a value lets a stdio client rehearse those tools against fixtures too.
 
 List the canonical sandbox test data (no auth at all):
 
