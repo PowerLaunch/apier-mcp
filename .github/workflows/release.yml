@@ -18,7 +18,7 @@ permissions:
 jobs:
   build-audit:
     runs-on: ubuntu-latest
-    if: github.repository == 'PowerLaunch/apier-mcp'
+    if: github.repository == 'apier-no/apier-mcp'
     permissions:
       contents: read
     steps:
@@ -77,7 +77,7 @@ jobs:
   publish:
     needs: build-audit
     runs-on: ubuntu-latest
-    if: github.repository == 'PowerLaunch/apier-mcp'
+    if: github.repository == 'apier-no/apier-mcp'
     permissions:
       contents: read
       id-token: write
