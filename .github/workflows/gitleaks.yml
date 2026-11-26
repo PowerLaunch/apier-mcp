@@ -19,14 +19,68 @@ jobs:
     timeout-minutes: 5
     permissions:
       contents: read
-      pull-requests: write
+    # The open-source gitleaks CLI, not gitleaks/gitleaks-action: the action
+    # needs a paid GITLEAKS_LICENSE for repositories owned by an organization,
+    # and failed on every run once this repo moved to apier-no.
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      # sha256 of gitleaks_8.30.1_linux_x64.tar.gz, from the release's
+      # gitleaks_8.30.1_checksums.txt. Bump both together.
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
     steps:
       - name: Checkout repository
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
+          tarball="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          sums="gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+          base="https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}"
+          dir="$RUNNER_TEMP/gitleaks"
+          mkdir -p "$dir"
+          cd "$dir"
+          curl -fsSL --max-time 60 -o "$tarball" "$base/$tarball"
+          curl -fsSL --max-time 60 -o "$sums" "$base/$sums"
+          # The release's checksums file must list the pinned hash, and the
+          # tarball must match it. Either mismatch fails the step.
+          grep -qxF "$GITLEAKS_SHA256  $tarball" "$sums"
+          grep -F "  $tarball" "$sums" | sha256sum -c -
+          tar -xzf "$tarball" gitleaks
+          echo "$dir" >> "$GITHUB_PATH"
+          "$dir/gitleaks" version
+      # pull_request: only the PR's commits. push: only the pushed range.
+      # schedule: the full history. .gitleaks.toml and .gitleaksignore are
+      # passed explicitly so the custom rule and the fingerprint allowlist
+      # always apply.
       - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v3
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          range=""
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            range="$PR_BASE_SHA..$PR_HEAD_SHA"
+          elif [ "$EVENT_NAME" = "push" ]; then
+            # A new branch (all-zero before) or a before commit that is not in
+            # the clone (force push) falls back to the full history.
+            if [ -n "$PUSH_BEFORE" ] && [ "$PUSH_BEFORE" != "0000000000000000000000000000000000000000" ] \
+              && git cat-file -e "${PUSH_BEFORE}^{commit}" 2>/dev/null; then
+              range="$PUSH_BEFORE..$PUSH_AFTER"
+            fi
+          fi
+          args=(git --redact --verbose --exit-code 1
+            --config .gitleaks.toml --gitleaks-ignore-path .gitleaksignore)
+          if [ -n "$range" ]; then
+            echo "Scanning $range"
+            args+=("--log-opts=$range")
+          else
+            echo "Scanning the full history"
+          fi
+          gitleaks "${args[@]}" .
