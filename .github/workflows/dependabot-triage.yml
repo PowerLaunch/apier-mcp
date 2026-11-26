@@ -81,7 +81,7 @@ jobs:
     if: >-
       github.event_name == 'pull_request_target' &&
       github.event.pull_request.user.login == 'dependabot[bot]' &&
-      github.repository == 'PowerLaunch/apier-mcp'
+      github.repository == 'apier-no/apier-mcp'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -230,7 +230,7 @@ jobs:
       github.event_name == 'workflow_run' &&
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.actor.login == 'dependabot[bot]' &&
-      github.repository == 'PowerLaunch/apier-mcp'
+      github.repository == 'apier-no/apier-mcp'
     runs-on: ubuntu-latest
     # Room for the merge step's 10-minute wait for checks still running.
     timeout-minutes: 15
@@ -383,7 +383,7 @@ jobs:
   safety-net:
     if: >-
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') &&
-      github.repository == 'PowerLaunch/apier-mcp'
+      github.repository == 'apier-no/apier-mcp'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:

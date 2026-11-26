@@ -192,7 +192,7 @@ jobs:
   live-auth:
     runs-on: ubuntu-latest
     needs: build
-    if: ${{ github.repository == 'PowerLaunch/apier-mcp' }}
+    if: ${{ github.repository == 'apier-no/apier-mcp' }}
     timeout-minutes: 5
     env:
       # Bind the secret to job-level env so the step-level `if:` below can
