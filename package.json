@@ -2,7 +2,7 @@
   "name": "@apier-no/mcp",
   "mcpName": "no.apier/mcp",
   "version": "1.2.1",
-  "description": "Apier MCP Server — Norwegian company data and compliance for AI agents. Hardened thin proxy connecting local MCP clients (Claude Desktop, Cursor, VS Code, Zed) to Apier's hosted MCP server at https://www.apier.no/api/mcp: Brønnøysund company data, Altinn 3 compliance, signing authority, filing deadlines and fullmakt. Try the API without signing up: the sandbox mirror under /api/v1/sandbox/ on apier.no accepts a self-invented apier_sandbox_test_<suffix> bearer and answers with fixtures (direct HTTP calls; starting the proxy itself requires APIER_API_KEY).",
+  "description": "Apier MCP server: machine-verifiable Norwegian company authority for AI agents. Hardened thin proxy connecting local MCP clients (Claude Desktop, Cursor, VS Code, Zed) to Apier's hosted MCP server at https://www.apier.no/api/mcp: company verification and the register's coded signing rules (signaturrett and prokura) from Brønnøysundregistrene, with signed receipts. Try the API without signing up: the sandbox mirror under /api/v1/sandbox/ on apier.no accepts a self-invented apier_sandbox_test_<suffix> bearer and answers with fixtures (direct HTTP calls; starting the proxy itself requires APIER_API_KEY).",
   "type": "module",
   "bin": {
     "apier-mcp": "dist/cli.js"
@@ -28,10 +28,10 @@
     "access": "public",
     "provenance": true
   },
-  "repository": "github:PowerLaunch/apier-mcp",
+  "repository": "github:apier-no/apier-mcp",
   "homepage": "https://www.apier.no",
   "bugs": {
-    "url": "https://github.com/PowerLaunch/apier-mcp/issues"
+    "url": "https://github.com/apier-no/apier-mcp/issues"
   },
   "keywords": [
     "mcp",
@@ -41,7 +41,10 @@
     "norwegian",
     "brreg",
     "bronnoysund",
-    "altinn",
+    "enhetsregisteret",
+    "signaturrett",
+    "prokura",
+    "kyb",
     "compliance",
     "company-data",
     "kyc",

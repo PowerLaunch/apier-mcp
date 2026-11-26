@@ -1,9 +1,9 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "no.apier/mcp",
-  "description": "Norwegian company data and compliance for AI agents: Brønnøysund, Altinn 3, fullmakt.",
+  "description": "Norwegian company verification and signing authority (signaturrett, prokura) for AI agents.",
   "repository": {
-    "url": "https://github.com/PowerLaunch/apier-mcp",
+    "url": "https://github.com/apier-no/apier-mcp",
     "source": "github"
   },
   "version": "1.2.1",
