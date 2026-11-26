@@ -1,0 +1,62 @@
+# PR notify: ONE ntfy push to Tony's phone when a pull request is opened,
+# reopened or marked ready for review. Dependabot PRs are left out, because
+# dependabot-triage.yml already pushes for the ones that need a human.
+# Run it by hand (workflow_dispatch) to send a test notification.
+#
+# Security: pull_request_target runs with the base repository's context, so
+# this workflow never checks out or runs code from the PR, and the token has
+# no permissions at all. Values from the PR (title, author, URL) reach shell
+# only through env vars, never through ${{ }} inside the script. The ntfy
+# topic is a secret: it is only ever read from env and never printed (curl
+# output goes to /dev/null, because ntfy's response body echoes the topic).
+# Same ntfy server and pattern as dependabot-triage.yml.
+name: "PR notify"
+
+on:
+  pull_request_target:
+    types: [opened, reopened, ready_for_review]
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  notify:
+    if: >-
+      github.repository == 'apier-no/apier-mcp' &&
+      (github.event_name == 'workflow_dispatch' ||
+       github.event.pull_request.user.login != 'dependabot[bot]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Send ntfy push
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          ACTOR: ${{ github.actor }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            title="apier-mcp: test notification"
+            body="Test notification from the PR notify workflow, run by $ACTOR."
+            click="$RUN_URL"
+          else
+            title="New PR #$PR_NUMBER in apier-mcp"
+            body="$PR_TITLE by $PR_AUTHOR"
+            click="$PR_URL"
+          fi
+          if [ -z "${NTFY_TOPIC:-}" ]; then
+            echo "::warning::NTFY_TOPIC secret is not set; push skipped for $click"
+            exit 0
+          fi
+          curl -fsS --max-time 20 -o /dev/null \
+            -H "Title: $title" \
+            -H "Click: $click" \
+            -H "Tags: pr" \
+            --data-binary "$body" \
+            "https://ntfy.sh/$NTFY_TOPIC"
+          echo "Push sent for $click"
